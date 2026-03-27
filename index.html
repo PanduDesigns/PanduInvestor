@@ -99,6 +99,7 @@
         <div class="chart-container" id="inline-chart-container">
           <div class="chart-header">
             <span id="chart-title">📊 ANÁLISIS TÉCNICO (6 MESES)</span>
+            <span class="chart-hint">Haz clic para ampliar e interactuar 🔍</span>
           </div>
           <canvas id="inline-chart"></canvas>
         </div>
@@ -251,6 +252,20 @@
     </section>
 
   </main>
+
+  <div class="modal-overlay hidden" id="modal-chart-fs">
+    <div class="modal-box modal-xl">
+      <div class="modal-header-flex">
+        <h3 class="modal-title" id="fs-chart-title" style="color:var(--neon-cyan); margin:0;">ANÁLISIS TÉCNICO</h3>
+        <button class="btn-close-modal" onclick="closeChartModal()">✖</button>
+      </div>
+      <p class="modal-text" style="text-align:left; font-size:0.8rem; margin-top:5px;">Rueda del ratón o "pellizca" para hacer zoom. Arrastra para navegar por el tiempo.</p>
+      
+      <div class="modal-chart-wrapper">
+        <canvas id="fullscreen-chart"></canvas>
+      </div>
+    </div>
+  </div>
 
   <div class="modal-overlay hidden" id="modal-transfer">
     <div class="modal-box modal-wide">

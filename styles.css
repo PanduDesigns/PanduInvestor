@@ -1,6 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
    PANDU INVESTOR — styles.css
-   Dos mercados: 🇪🇸 ES (verde/dorado) | 🇺🇸 US (azul/cyan)
    ═══════════════════════════════════════════════════════════ */
 
 :root {
@@ -190,7 +189,7 @@ body.market-us .panel-trade { border-color: rgba(58,143,255,0.2); }
 .sugg-name { color: var(--text-muted); font-size: 0.8rem; }
 
 /* ═══════════════════════════════════════════════════════════
-   FORMULARIOS Y GRÁFICAS ORGANICAS
+   FORMULARIOS
    ═══════════════════════════════════════════════════════════ */
 .tab-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 14px; background: var(--bg-input); border-radius: var(--radius); padding: 4px; }
 .tab-btn { background: transparent; border: none; color: var(--text-muted); font-family: var(--font-arcade); font-size: 0.38rem; padding: 9px 4px; border-radius: 6px; cursor: pointer; }
@@ -236,7 +235,9 @@ body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,
   letter-spacing: 0.5px;
 }
 
-/* GRÁFICA ORGÁNICA E INTEGRADA */
+/* ═══════════════════════════════════════════════════════════
+   GRÁFICAS INTEGRADAS E INTERACTIVAS
+   ═══════════════════════════════════════════════════════════ */
 @keyframes fadeInSlide { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
 .chart-container {
@@ -247,16 +248,30 @@ body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,
   padding: 12px;
   display: none; 
   animation: fadeInSlide 0.4s ease forwards;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+.chart-container:hover {
+    box-shadow: 0 0 15px rgba(0,229,255,0.2);
 }
 .chart-container.active { display: block; }
 .chart-header {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  margin-bottom: 12px;
+}
+#chart-title {
   font-family: var(--font-arcade);
   font-size: 0.32rem;
   color: var(--text-muted);
-  margin-bottom: 12px;
-  text-align: center;
   letter-spacing: 1px;
 }
+.chart-hint {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: var(--neon-cyan);
+  opacity: 0.8;
+}
+
 #inline-chart {
   width: 100%;
   height: 220px;
@@ -312,8 +327,18 @@ body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,
    MODALES
    ═══════════════════════════════════════════════════════════ */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(6px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
-.modal-box { background: var(--bg-panel); border: 2px solid var(--neon-red); border-radius: var(--radius-lg); padding: 24px 20px; max-width: 400px; width: 100%; text-align: center; box-shadow: 0 0 60px rgba(255,58,92,0.25); }
+.modal-box { background: var(--bg-panel); border: 2px solid var(--neon-red); border-radius: var(--radius-lg); padding: 24px 20px; max-width: 400px; width: 100%; text-align: center; box-shadow: 0 0 60px rgba(255,58,92,0.25); display: flex; flex-direction: column; }
 .modal-wide { max-width: 500px; border-color: var(--neon-cyan); box-shadow: 0 0 60px rgba(0,229,255,0.2); }
+
+/* Nuevo modal XL para el gráfico interactivo */
+.modal-xl { max-width: 90vw; width: 100%; height: 85vh; border-color: var(--neon-cyan); box-shadow: 0 0 60px rgba(0,229,255,0.2); padding: 20px; }
+.modal-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.btn-close-modal { background: transparent; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer; transition: 0.2s; }
+.btn-close-modal:hover { color: var(--neon-red); }
+.modal-chart-wrapper { flex: 1; width: 100%; position: relative; margin-top: 10px; border: 1px solid var(--border-panel); border-radius: var(--radius); overflow: hidden; }
+#fullscreen-chart { width: 100%; height: 100%; background: var(--bg-input); touch-action: none; cursor: grab; display: block; }
+#fullscreen-chart:active { cursor: grabbing; }
+
 .modal-title { font-family: var(--font-arcade); font-size: 0.55rem; color: var(--neon-red); margin-bottom: 12px; }
 .modal-text { font-family: var(--font-body); font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 15px; }
 .modal-buttons { display: flex; gap: 10px; justify-content: center; }

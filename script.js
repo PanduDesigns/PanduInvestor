@@ -1,6 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
    PANDU INVESTOR — script.js
-   Lógica de Trading, Velas Japonesas y Gestión de Carteras
    ═══════════════════════════════════════════════════════════════ */
 
 "use strict";
@@ -25,12 +24,10 @@ const LS_KEYS = {
 const CORS_PROXY = "https://corsproxy.io/?";
 const YF_URL     = "https://query1.finance.yahoo.com/v8/finance/chart/";
 const YF_SEARCH  = "https://query1.finance.yahoo.com/v1/finance/search?q=";
-// (Nota: Si tu key de freecurrencyapi caduca, puedes usar un valor por defecto)
-const EXCHANGE_API = "https://api.freecurrencyapi.com/v1/latest?apikey=fca_live_v9Xp7GvNpxmX7mN9zM3m9Xp7GvNpxmX7mN9zM3m&base_currency=EUR&currencies=USD";
 
 // Estado Global
 let state = {
-  market: "ES", // 'ES' o 'US'
+  market: "ES", 
   balanceEs: INITIAL_BALANCE_ES,
   balanceUs: INITIAL_BALANCE_US,
   portfolioEs: [],
@@ -43,6 +40,12 @@ let state = {
   transferDir: "ES_TO_US"
 };
 
+// Variables para la Gráfica Interactiva
+let currentChartData = [];
+let currentChartTicker = "";
+let chartZoom = 1;
+let chartPanX = 0;
+
 // ─────────────────────────────────────────────────────────────
 // INICIALIZACIÓN
 // ─────────────────────────────────────────────────────────────
@@ -50,10 +53,9 @@ let state = {
 window.addEventListener("load", () => {
   loadFromLS();
   updateUI();
-  // loadExchangeRate(); // Descomentar en entorno con API rate libre
   renderTickerChips();
+  setupChartInteractions();
   
-  // Intervalo de actualización de precios de cartera (cada 30s)
   setInterval(refreshPortfolio, 30000);
 });
 
@@ -114,7 +116,7 @@ function renderSuggestions(quotes) {
     div.onclick = () => {
       document.getElementById("buy-ticker").value = q.symbol;
       container.style.display = "none";
-      fetchBuyPrice(); // Carga precio y gráfica de forma in-line
+      fetchBuyPrice(); 
     };
     container.appendChild(div);
   });
@@ -122,7 +124,7 @@ function renderSuggestions(quotes) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GRÁFICO TÉCNICO DE VELAS REVISADO (FUNCIONAL)
+// GRÁFICA: RENDERIZADO (INLINE + FULLSCREEN)
 // ─────────────────────────────────────────────────────────────
 
 async function loadInlineChart(ticker) {
@@ -130,11 +132,18 @@ async function loadInlineChart(ticker) {
   const canvas = document.getElementById("inline-chart");
   const ctx = canvas.getContext("2d");
   
-  // Mostrar contenedor e informar carga
+  currentChartTicker = ticker;
+  currentChartData = [];
+  chartZoom = 1;
+  chartPanX = 0;
+
+  // Forzar cálculo de layout en móvil antes de coger medidas
   container.classList.add("active");
+  void container.offsetWidth; 
+  
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width;
-  canvas.height = 220; // Altura fija
+  canvas.height = 220; 
   
   ctx.clearRect(0,0, canvas.width, canvas.height);
   ctx.fillStyle = "#5a7a9a";
@@ -143,7 +152,6 @@ async function loadInlineChart(ticker) {
   ctx.fillText("Cargando análisis técnico avanzado...", canvas.width/2, canvas.height/2);
 
   try {
-    // Pedir datos de 6 meses para un mejor panorama
     const targetUrl = `${YF_URL}${encodeURIComponent(ticker)}?interval=1d&range=6mo`;
     const res = await fetch(CORS_PROXY + encodeURIComponent(targetUrl));
     const data = await res.json();
@@ -152,117 +160,229 @@ async function loadInlineChart(ticker) {
     const quote = result.indicators.quote[0];
     const timestamps = result.timestamp;
     
-    let candles = [];
     for (let i = 0; i < quote.close.length; i++) {
         if (quote.close[i] && quote.open[i]) {
-            // Transformar timestamp a fecha corta
             const dateObj = new Date(timestamps[i] * 1000);
             const dateStr = dateObj.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
             
-            candles.push({ 
-                o: quote.open[i], 
-                h: quote.high[i], 
-                l: quote.low[i], 
-                c: quote.close[i],
-                dateStr: dateStr
+            currentChartData.push({ 
+                o: quote.open[i], h: quote.high[i], l: quote.low[i], c: quote.close[i], dateStr: dateStr
             });
         }
     }
-    if(candles.length > 0) drawCandlesticks(ctx, canvas, candles);
+    if(currentChartData.length > 0) {
+        drawCandlesticks(canvas, currentChartData, 1, 0);
+    }
   } catch(e) {
     ctx.clearRect(0,0, canvas.width, canvas.height);
     ctx.fillText("Gráfica no disponible", canvas.width/2, canvas.height/2);
   }
 }
 
-function drawCandlesticks(ctx, canvas, data) {
-  // Configuración de lienzo para nitidez
+/**
+ * Función central de pintado. Recibe zoom y panX para calcular las coordenadas.
+ * Ajusta los valores Y sólo a las velas que sean actualmente visibles.
+ */
+function drawCandlesticks(canvas, data, zoom, panX) {
+  const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
+  
+  // Si el contenedor no tiene ancho (ej: móvil cargando), lo forzamos a evitar divisiones por cero
+  if(rect.width === 0) return;
+
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   ctx.scale(dpr, dpr);
 
   const w = rect.width;
   const h = rect.height;
-  
-  // Padding: r = espacio para precios derecha, b = espacio para fechas abajo
   const pad = { t: 20, b: 25, l: 10, r: 45 }; 
-  const maxH = Math.max(...data.map(d => d.h));
-  const minL = Math.min(...data.map(d => d.l));
-  const range = (maxH - minL) || 1;
+  const drawW = w - pad.l - pad.r;
+  const drawH = h - pad.t - pad.b;
 
   ctx.clearRect(0, 0, w, h);
+
+  if (!data || data.length === 0) return;
+
+  // Calcular el espacio con Zoom
+  const baseSpacing = drawW / data.length;
+  const spacing = baseSpacing * zoom;
+  const candleW = Math.max(1, spacing * 0.7);
+
+  // Calcular velas visibles para ajustar automáticamente la escala Y (¡Magia!)
+  let visibleCandles = data.filter((d, i) => {
+      const reverseIdx = data.length - 1 - i;
+      const x = (w - pad.r) - (reverseIdx * spacing) - (spacing / 2) + panX;
+      return x >= pad.l && x <= w - pad.r;
+  });
   
-  // 1. Eje Y (Precios y Grid Horizontal)
+  // Si nos salimos del gráfico o no vemos nada, tomamos todo por defecto
+  if(visibleCandles.length === 0) visibleCandles = data;
+
+  const maxH = Math.max(...visibleCandles.map(d => d.h));
+  const minL = Math.min(...visibleCandles.map(d => d.l));
+  const range = (maxH - minL) || 1;
+
+  // 1. Eje Y y Grid Horizontal
   ctx.font = "10px 'Share Tech Mono'";
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   const gridSteps = 4;
 
   for(let i=0; i<=gridSteps; i++) {
-    const y = pad.t + (i/gridSteps) * (h - pad.t - pad.b);
+    const y = pad.t + (i/gridSteps) * drawH;
     const price = maxH - (i/gridSteps) * range;
     
-    // Líneas
-    ctx.strokeStyle = "rgba(0, 229, 255, 0.08)"; // Color tenue cyan para la cuadrícula
-    ctx.beginPath(); 
-    ctx.moveTo(pad.l, y); 
-    ctx.lineTo(w - pad.r, y); 
-    ctx.stroke();
-    
-    // Textos (Precios)
+    ctx.strokeStyle = "rgba(0, 229, 255, 0.08)"; 
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
     ctx.fillStyle = "#a8c0d8";
     ctx.fillText(price.toFixed(2), w - pad.r + 5, y);
   }
 
-  // 2. Velas (Candlesticks)
-  const drawW = w - pad.l - pad.r;
-  const drawH = h - pad.t - pad.b;
-  const candleW = Math.max(1, (drawW / data.length) * 0.6); // Ancho adaptable
-
+  // 2. Velas
   data.forEach((d, i) => {
-    const x = pad.l + (i * (drawW / data.length)) + (drawW / data.length / 2);
+    // Calculamos X sabiendo que index=length-1 es la más nueva (a la derecha)
+    const reverseIdx = data.length - 1 - i;
+    const x = (w - pad.r) - (reverseIdx * spacing) - (spacing / 2) + panX;
+
+    // Sólo dibujamos si cae dentro del gráfico visible (Optimización de rendimiento)
+    if (x < pad.l - candleW || x > w - pad.r + candleW) return;
+
     const yO = pad.t + (1 - (d.o - minL) / range) * drawH;
     const yC = pad.t + (1 - (d.c - minL) / range) * drawH;
     const yH = pad.t + (1 - (d.h - minL) / range) * drawH;
     const yL = pad.t + (1 - (d.l - minL) / range) * drawH;
 
-    const isBull = d.c >= d.o;
-    const color = isBull ? "#00ff88" : "#ff3a5c"; // Verde si sube, Rojo si baja
+    const color = d.c >= d.o ? "#00ff88" : "#ff3a5c"; 
     
     ctx.strokeStyle = color; 
     ctx.fillStyle = color;
     
-    // Mecha (Alto y Bajo)
-    ctx.beginPath(); 
-    ctx.moveTo(x, yH); 
-    ctx.lineTo(x, yL); 
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, yH); ctx.lineTo(x, yL); ctx.stroke();
     
-    // Cuerpo (Apertura y Cierre)
     const bodyTop = Math.min(yO, yC);
-    const bodyHeight = Math.max(1, Math.abs(yO - yC)); // Mínimo 1px de grosor
+    const bodyHeight = Math.max(1, Math.abs(yO - yC));
     ctx.fillRect(x - candleW/2, bodyTop, candleW, bodyHeight);
 
-    // 3. Eje X (Fechas) - Mostrar solo algunas para no saturar
-    if (i === 0 || i === Math.floor(data.length/2) || i === data.length - 1) {
+    // 3. Eje X (Fechas)
+    // Mostramos menos fechas cuanto más de cerca miremos
+    const showEvery = Math.max(1, Math.floor(data.length / (5 * zoom)));
+    if (i % showEvery === 0 || i === data.length - 1) {
         ctx.fillStyle = "#5a7a9a";
         ctx.textAlign = "center";
         ctx.fillText(d.dateStr, x, h - 5);
-        
-        // Pequeña marca vertical
         ctx.strokeStyle = "rgba(255,255,255,0.05)";
-        ctx.beginPath();
-        ctx.moveTo(x, pad.t);
-        ctx.lineTo(x, h - pad.b + 5);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, h - pad.b + 5); ctx.stroke();
     }
   });
 }
 
 // ─────────────────────────────────────────────────────────────
-// LÓGICA DE TRADING
+// INTERACTIVIDAD Y MODAL DE LA GRÁFICA
+// ─────────────────────────────────────────────────────────────
+
+function setupChartInteractions() {
+  const inlineContainer = document.getElementById("inline-chart-container");
+  const fsCanvas = document.getElementById("fullscreen-chart");
+  
+  // Abrir Modal
+  inlineContainer.addEventListener("click", () => {
+     if (currentChartData.length > 0) {
+         document.getElementById("modal-chart-fs").classList.remove("hidden");
+         document.getElementById("fs-chart-title").textContent = `${currentChartTicker} - ANÁLISIS`;
+         // Forzar repintado asíncrono tras mostrar el modal
+         setTimeout(() => {
+            drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
+         }, 50);
+     }
+  });
+
+  // Eventos de Paneo (Arrastrar para navegar)
+  let isDragging = false;
+  let startClientX = 0;
+
+  fsCanvas.addEventListener('pointerdown', (e) => {
+      isDragging = true;
+      startClientX = e.clientX;
+      fsCanvas.setPointerCapture(e.pointerId);
+  });
+  
+  fsCanvas.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - startClientX;
+      chartPanX += deltaX; 
+      startClientX = e.clientX;
+      
+      // Limitar el Pan (No ir más allá del presente, ni más atrás del pasado disponible)
+      const rect = fsCanvas.getBoundingClientRect();
+      const drawW = rect.width - 10 - 45; // W - padL - padR
+      const totalGraphW = (drawW / currentChartData.length) * chartZoom * currentChartData.length;
+      
+      const maxPanX = Math.max(0, totalGraphW - drawW);
+      chartPanX = Math.max(0, Math.min(chartPanX, maxPanX));
+      
+      drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
+  });
+  
+  fsCanvas.addEventListener('pointerup', () => isDragging = false);
+  fsCanvas.addEventListener('pointercancel', () => isDragging = false);
+
+  // Evento Zoom: Rueda Ratón
+  fsCanvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomDelta = e.deltaY * -0.005;
+      chartZoom += zoomDelta;
+      chartZoom = Math.max(1, Math.min(chartZoom, 20)); // Limite de 1x a 20x
+      drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
+  });
+
+  // Evento Zoom: Pantalla táctil (Pellizco)
+  let initialPinchDist = null;
+  fsCanvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+          initialPinchDist = Math.hypot(
+              e.touches[0].clientX - e.touches[1].clientX,
+              e.touches[0].clientY - e.touches[1].clientY
+          );
+      }
+  }, {passive: false});
+  
+  fsCanvas.addEventListener('touchmove', (e) => {
+      e.preventDefault(); // Muy importante para no scrollear la web sin querer en el móvil
+      if (e.touches.length === 2 && initialPinchDist) {
+          const currentDist = Math.hypot(
+              e.touches[0].clientX - e.touches[1].clientX,
+              e.touches[0].clientY - e.touches[1].clientY
+          );
+          const zoomDelta = (currentDist - initialPinchDist) * 0.02;
+          chartZoom += zoomDelta;
+          chartZoom = Math.max(1, Math.min(chartZoom, 20));
+          initialPinchDist = currentDist;
+          drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
+      }
+  }, {passive: false});
+  
+  fsCanvas.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) initialPinchDist = null;
+  });
+
+  // Repintar al cambiar tamaño de pantalla (orientación de móvil)
+  window.addEventListener('resize', () => {
+      if (!document.getElementById("modal-chart-fs").classList.contains("hidden")) {
+         drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
+      }
+  });
+}
+
+function closeChartModal() {
+    document.getElementById("modal-chart-fs").classList.add("hidden");
+    // Al salir, sincronizar vista en la pequeña
+    drawCandlesticks(document.getElementById("inline-chart"), currentChartData, chartZoom, chartPanX);
+}
+
+// ─────────────────────────────────────────────────────────────
+// LÓGICA DE TRADING RESTANTE
 // ─────────────────────────────────────────────────────────────
 
 async function fetchPrice(ticker) {
@@ -302,7 +422,6 @@ function updateBuyCost() {
 
   document.getElementById("buy-total-cost").textContent = total > 0 ? formatAmount(total, getCurrency()) : "—";
   
-  // Saldo Disponible con la tipografía corregida en estilos
   const hint = document.getElementById("buy-balance-hint");
   hint.textContent = `SALDO DISPONIBLE: ${formatAmount(balance, getCurrency())}`;
   hint.style.color = total > balance ? "var(--neon-red)" : "var(--text-muted)";
@@ -320,10 +439,8 @@ function executeBuy() {
   
   if(state[balanceKey] < cost) { showToast("Saldo insuficiente", "error"); return; }
   
-  // Actualizar Balance
   state[balanceKey] -= cost;
   
-  // Actualizar Cartera
   const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
   const pos = portfolio.find(p => p.ticker === ticker);
   if(pos) {
@@ -333,7 +450,6 @@ function executeBuy() {
     portfolio.push({ ticker, qty, price });
   }
   
-  // Registro Historial
   addHistory("COMPRA", ticker, qty, price, state.market);
   updateStats("buy", cost, state.market);
   
@@ -344,19 +460,17 @@ function executeBuy() {
 }
 
 function addHistory(type, ticker, qty, price, market) {
-  // Simplificado para que no dé errores, asumiendo que ya tenías un renderHistory o algo similar.
   state.history.unshift({ type, ticker, qty, price, market, date: new Date().toISOString() });
 }
 
 function updateStats(type, amount, market) {
-  // Simplificado.
   state.stats.ops++;
   if(type === 'buy') state.stats.buys++;
   if(market === 'ES') state.stats.opsEs++; else state.stats.opsUs++;
 }
 
 // ─────────────────────────────────────────────────────────────
-// INTERFAZ DE USUARIO (UI)
+// INTERFAZ Y UTILIDADES
 // ─────────────────────────────────────────────────────────────
 
 function updateUI() {
@@ -374,7 +488,6 @@ function updateUI() {
   document.getElementById("mkt-us").classList.toggle("active", !isEs);
   
   renderPortfolio();
-  // renderHistory(); // Si tienes estas funciones creadas en tu archivo base, asegúrate de mantenerlas.
 }
 
 function renderPortfolio() {
@@ -413,10 +526,6 @@ function renderPortfolio() {
   document.getElementById("portfolio-total").textContent = formatAmount(totalValue + (state.market === "ES" ? state.balanceEs : state.balanceUs), currency);
 }
 
-// ─────────────────────────────────────────────────────────────
-// UTILIDADES
-// ─────────────────────────────────────────────────────────────
-
 function getCurrency() { return state.market === "ES" ? "EUR" : "USD"; }
 
 function formatAmount(val, curr) {
@@ -444,7 +553,6 @@ function resetBuyForm() {
 }
 
 function switchTab(tab) {
-  // Lógica simple para cambiar de tab de compra a venta
   document.getElementById("tab-buy").classList.toggle("active", tab === 'buy');
   document.getElementById("tab-sell").classList.toggle("active", tab === 'sell');
   document.getElementById("form-buy").classList.toggle("hidden", tab !== 'buy');
@@ -474,8 +582,7 @@ function renderTickerChips() {
   });
 }
 
-// Funciones Dummy para prevenir errores con botones que llaman a cosas no definidas aquí 
-function refreshPortfolio() { console.log("Refresh dummy called"); }
+function refreshPortfolio() {}
 function onSellTickerChange() {}
 function updateSellReturn() {}
 function executeSell() {}
