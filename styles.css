@@ -54,23 +54,23 @@ body {
 .hidden { display: none !important; }
 
 /* ═══════════════════════════════════════════════════════════
-   CABECERA OPTIMIZADA (Menos intrusiva y alineada)
+   CABECERA OPTIMIZADA
    ═══════════════════════════════════════════════════════════ */
 .main-header {
   background: linear-gradient(135deg, #0d1530 0%, #111e3a 100%);
   border-bottom: 2px solid var(--neon-cyan);
   box-shadow: 0 0 30px rgba(0,229,255,0.15), 0 4px 20px rgba(0,0,0,0.5);
   position: sticky; top: 0; z-index: 100;
-  padding: 8px 10px; /* Reducido para móviles */
+  padding: 8px 10px;
 }
 
 .header-inner {
   max-width: 1440px; margin: 0 auto;
   display: flex; align-items: center; gap: 12px;
-  flex-wrap: nowrap; overflow-x: auto; /* Scrolleable horizontal en móvil */
-  scrollbar-width: none; /* Oculta scrollbar en Firefox */
+  flex-wrap: nowrap; overflow-x: auto;
+  scrollbar-width: none;
 }
-.header-inner::-webkit-scrollbar { display: none; } /* Oculta scrollbar en Chrome */
+.header-inner::-webkit-scrollbar { display: none; }
 
 .logo { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .logo-icon { font-size: 1.3rem; }
@@ -154,7 +154,6 @@ body {
 }
 @media (max-width: 768px) {
   .main-grid { grid-template-columns: 1fr; }
-  /* Ajustes extras para móvil de la cabecera ya aplicados mediante el diseño horizontal scrollable */
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -191,7 +190,7 @@ body.market-us .panel-trade { border-color: rgba(58,143,255,0.2); }
 .sugg-name { color: var(--text-muted); font-size: 0.8rem; }
 
 /* ═══════════════════════════════════════════════════════════
-   FORMULARIOS
+   FORMULARIOS Y GRÁFICAS ORGANICAS
    ═══════════════════════════════════════════════════════════ */
 .tab-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 14px; background: var(--bg-input); border-radius: var(--radius); padding: 4px; }
 .tab-btn { background: transparent; border: none; color: var(--text-muted); font-family: var(--font-arcade); font-size: 0.38rem; padding: 9px 4px; border-radius: 6px; cursor: pointer; }
@@ -202,7 +201,7 @@ body.market-us .panel-trade { border-color: rgba(58,143,255,0.2); }
 .form-group { margin-bottom: 12px; }
 .form-label { display: block; font-family: var(--font-arcade); font-size: 0.32rem; color: var(--text-muted); margin-bottom: 5px; }
 .input-row { display: flex; gap: 6px; }
-.game-input { width: 100%; background: var(--bg-input); border: 1px solid rgba(0,229,255,0.2); border-radius: var(--radius); color: var(--text-bright); font-family: var(--font-mono); font-size: 0.95rem; padding: 9px 12px; outline: none; }
+.game-input { width: 100%; background: var(--bg-input); border: 1px solid rgba(0,229,255,0.2); border-radius: var(--radius); color: var(--text-bright); font-family: var(--font-mono); font-size: 0.95rem; padding: 9px 12px; outline: none; transition: border 0.3s; }
 .game-input:focus { border-color: var(--neon-cyan); box-shadow: 0 0 10px rgba(0,229,255,0.2); }
 
 .btn-lookup { background: rgba(0,229,255,0.08); border: 1px solid var(--neon-cyan); color: var(--neon-cyan); border-radius: var(--radius); padding: 0 13px; cursor: pointer; }
@@ -212,7 +211,7 @@ body.market-us .panel-trade { border-color: rgba(58,143,255,0.2); }
 .cost-preview span:first-child, .pnl-preview span:first-child { font-family: var(--font-arcade); font-size: 0.32rem; color: var(--text-muted); }
 .cost-preview span:last-child { color: var(--neon-cyan); font-family: var(--font-mono); font-size: 1rem; }
 
-.btn-action { width: 100%; border: none; border-radius: var(--radius); font-family: var(--font-arcade); font-size: 0.45rem; padding: 12px; cursor: pointer; }
+.btn-action { width: 100%; border: none; border-radius: var(--radius); font-family: var(--font-arcade); font-size: 0.45rem; padding: 12px; cursor: pointer; margin-top: 6px;}
 .btn-buy { background: linear-gradient(135deg, #00cc55, #00ff88); color: #001a0a; }
 .btn-sell { background: linear-gradient(135deg, #cc002a, #ff3a5c); color: #1a0005; }
 .trade-msg { margin-top: 8px; font-family: var(--font-arcade); font-size: 0.35rem; text-align: center; min-height: 18px; }
@@ -224,6 +223,49 @@ body.market-us .panel-trade { border-color: rgba(58,143,255,0.2); }
 .ticker-chip-btn { background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.2); color: var(--neon-cyan); border-radius: 4px; padding: 3px 8px; font-family: var(--font-mono); font-size: 0.8rem; cursor: pointer; }
 body.market-es .ticker-chip-btn { color: var(--es-color); border-color: rgba(255,204,0,0.3); background: rgba(255,204,0,0.06); }
 body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,143,255,0.3); background: rgba(58,143,255,0.06); }
+
+/* TIPOGRAFÍA CORREGIDA PARA SALDO DISPONIBLE */
+.balance-hint {
+  font-family: var(--font-arcade);
+  font-size: 0.30rem;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 4px;
+  margin-bottom: 12px;
+  min-height: 14px;
+  letter-spacing: 0.5px;
+}
+
+/* GRÁFICA ORGÁNICA E INTEGRADA */
+@keyframes fadeInSlide { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+.chart-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border-panel);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  padding: 12px;
+  display: none; 
+  animation: fadeInSlide 0.4s ease forwards;
+}
+.chart-container.active { display: block; }
+.chart-header {
+  font-family: var(--font-arcade);
+  font-size: 0.32rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  text-align: center;
+  letter-spacing: 1px;
+}
+#inline-chart {
+  width: 100%;
+  height: 220px;
+  background: var(--bg-input);
+  border-radius: 6px;
+  border: 1px solid rgba(0,229,255,0.1);
+  box-shadow: inset 0 0 15px rgba(0,0,0,0.6);
+  display: block;
+}
 
 /* ═══════════════════════════════════════════════════════════
    CARTERA Y TABLAS
