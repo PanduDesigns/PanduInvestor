@@ -45,8 +45,8 @@
       </div>
 
       <div class="header-actions">
-        <button class="btn-transfer" id="btn-transfer">⇄ TRANSF.</button>
-        <button class="btn-reset"    id="btn-reset">⚠ RESET</button>
+        <button class="btn-transfer" id="btn-transfer" onclick="openTransferModal()">⇄ TRANSF.</button>
+        <button class="btn-reset" id="btn-reset" onclick="openResetModal()">⚠ RESET</button>
       </div>
     </div>
 
@@ -96,7 +96,7 @@
           </div>
         </div>
 
-        <div class="chart-container" id="inline-chart-container">
+        <div class="chart-container" id="inline-chart-container" onclick="openChartModal()">
           <div class="chart-header">
             <span id="chart-title">📊 ANÁLISIS TÉCNICO (6 MESES)</span>
             <span class="chart-hint">Haz clic para ampliar e interactuar 🔍</span>

@@ -57,10 +57,13 @@ window.addEventListener("load", () => {
   setupChartInteractions();
   
   setInterval(refreshPortfolio, 30000);
+  refreshPortfolio(); // Carga inicial de precios al abrir
 });
 
 function loadFromLS() {
-  state.balanceEs   = parseFloat(localStorage.getItem(LS_KEYS.balanceEs)) || INITIAL_BALANCE_ES;
+  state.balanceEs   = parseFloat(localStorage.getItem(LS_KEYS.balanceEs));
+  if (isNaN(state.balanceEs)) state.balanceEs = INITIAL_BALANCE_ES;
+  
   state.balanceUs   = parseFloat(localStorage.getItem(LS_KEYS.balanceUs)) || INITIAL_BALANCE_US;
   state.portfolioEs = JSON.parse(localStorage.getItem(LS_KEYS.portfolioEs)) || [];
   state.portfolioUs = JSON.parse(localStorage.getItem(LS_KEYS.portfolioUs)) || [];
@@ -179,16 +182,11 @@ async function loadInlineChart(ticker) {
   }
 }
 
-/**
- * Función central de pintado. Recibe zoom y panX para calcular las coordenadas.
- * Ajusta los valores Y sólo a las velas que sean actualmente visibles.
- */
 function drawCandlesticks(canvas, data, zoom, panX) {
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   
-  // Si el contenedor no tiene ancho (ej: móvil cargando), lo forzamos a evitar divisiones por cero
   if(rect.width === 0) return;
 
   canvas.width = rect.width * dpr;
@@ -205,26 +203,22 @@ function drawCandlesticks(canvas, data, zoom, panX) {
 
   if (!data || data.length === 0) return;
 
-  // Calcular el espacio con Zoom
   const baseSpacing = drawW / data.length;
   const spacing = baseSpacing * zoom;
   const candleW = Math.max(1, spacing * 0.7);
 
-  // Calcular velas visibles para ajustar automáticamente la escala Y (¡Magia!)
   let visibleCandles = data.filter((d, i) => {
       const reverseIdx = data.length - 1 - i;
       const x = (w - pad.r) - (reverseIdx * spacing) - (spacing / 2) + panX;
       return x >= pad.l && x <= w - pad.r;
   });
   
-  // Si nos salimos del gráfico o no vemos nada, tomamos todo por defecto
   if(visibleCandles.length === 0) visibleCandles = data;
 
   const maxH = Math.max(...visibleCandles.map(d => d.h));
   const minL = Math.min(...visibleCandles.map(d => d.l));
   const range = (maxH - minL) || 1;
 
-  // 1. Eje Y y Grid Horizontal
   ctx.font = "10px 'Share Tech Mono'";
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
@@ -240,13 +234,10 @@ function drawCandlesticks(canvas, data, zoom, panX) {
     ctx.fillText(price.toFixed(2), w - pad.r + 5, y);
   }
 
-  // 2. Velas
   data.forEach((d, i) => {
-    // Calculamos X sabiendo que index=length-1 es la más nueva (a la derecha)
     const reverseIdx = data.length - 1 - i;
     const x = (w - pad.r) - (reverseIdx * spacing) - (spacing / 2) + panX;
 
-    // Sólo dibujamos si cae dentro del gráfico visible (Optimización de rendimiento)
     if (x < pad.l - candleW || x > w - pad.r + candleW) return;
 
     const yO = pad.t + (1 - (d.o - minL) / range) * drawH;
@@ -265,8 +256,6 @@ function drawCandlesticks(canvas, data, zoom, panX) {
     const bodyHeight = Math.max(1, Math.abs(yO - yC));
     ctx.fillRect(x - candleW/2, bodyTop, candleW, bodyHeight);
 
-    // 3. Eje X (Fechas)
-    // Mostramos menos fechas cuanto más de cerca miremos
     const showEvery = Math.max(1, Math.floor(data.length / (5 * zoom)));
     if (i % showEvery === 0 || i === data.length - 1) {
         ctx.fillStyle = "#5a7a9a";
@@ -282,23 +271,21 @@ function drawCandlesticks(canvas, data, zoom, panX) {
 // INTERACTIVIDAD Y MODAL DE LA GRÁFICA
 // ─────────────────────────────────────────────────────────────
 
-function setupChartInteractions() {
-  const inlineContainer = document.getElementById("inline-chart-container");
-  const fsCanvas = document.getElementById("fullscreen-chart");
-  
-  // Abrir Modal
-  inlineContainer.addEventListener("click", () => {
-     if (currentChartData.length > 0) {
+// Esta función es llamada desde el HTML ahora (onclick="openChartModal()")
+function openChartModal() {
+    if (currentChartData.length > 0) {
          document.getElementById("modal-chart-fs").classList.remove("hidden");
          document.getElementById("fs-chart-title").textContent = `${currentChartTicker} - ANÁLISIS`;
-         // Forzar repintado asíncrono tras mostrar el modal
          setTimeout(() => {
+            const fsCanvas = document.getElementById("fullscreen-chart");
             drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
          }, 50);
      }
-  });
+}
 
-  // Eventos de Paneo (Arrastrar para navegar)
+function setupChartInteractions() {
+  const fsCanvas = document.getElementById("fullscreen-chart");
+  
   let isDragging = false;
   let startClientX = 0;
 
@@ -314,9 +301,8 @@ function setupChartInteractions() {
       chartPanX += deltaX; 
       startClientX = e.clientX;
       
-      // Limitar el Pan (No ir más allá del presente, ni más atrás del pasado disponible)
       const rect = fsCanvas.getBoundingClientRect();
-      const drawW = rect.width - 10 - 45; // W - padL - padR
+      const drawW = rect.width - 10 - 45; 
       const totalGraphW = (drawW / currentChartData.length) * chartZoom * currentChartData.length;
       
       const maxPanX = Math.max(0, totalGraphW - drawW);
@@ -328,16 +314,14 @@ function setupChartInteractions() {
   fsCanvas.addEventListener('pointerup', () => isDragging = false);
   fsCanvas.addEventListener('pointercancel', () => isDragging = false);
 
-  // Evento Zoom: Rueda Ratón
   fsCanvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const zoomDelta = e.deltaY * -0.005;
       chartZoom += zoomDelta;
-      chartZoom = Math.max(1, Math.min(chartZoom, 20)); // Limite de 1x a 20x
+      chartZoom = Math.max(1, Math.min(chartZoom, 20)); 
       drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
   });
 
-  // Evento Zoom: Pantalla táctil (Pellizco)
   let initialPinchDist = null;
   fsCanvas.addEventListener('touchstart', (e) => {
       if (e.touches.length === 2) {
@@ -349,7 +333,7 @@ function setupChartInteractions() {
   }, {passive: false});
   
   fsCanvas.addEventListener('touchmove', (e) => {
-      e.preventDefault(); // Muy importante para no scrollear la web sin querer en el móvil
+      e.preventDefault(); 
       if (e.touches.length === 2 && initialPinchDist) {
           const currentDist = Math.hypot(
               e.touches[0].clientX - e.touches[1].clientX,
@@ -367,7 +351,6 @@ function setupChartInteractions() {
       if (e.touches.length < 2) initialPinchDist = null;
   });
 
-  // Repintar al cambiar tamaño de pantalla (orientación de móvil)
   window.addEventListener('resize', () => {
       if (!document.getElementById("modal-chart-fs").classList.contains("hidden")) {
          drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
@@ -377,12 +360,11 @@ function setupChartInteractions() {
 
 function closeChartModal() {
     document.getElementById("modal-chart-fs").classList.add("hidden");
-    // Al salir, sincronizar vista en la pequeña
     drawCandlesticks(document.getElementById("inline-chart"), currentChartData, chartZoom, chartPanX);
 }
 
 // ─────────────────────────────────────────────────────────────
-// LÓGICA DE TRADING RESTANTE
+// LÓGICA DE TRADING Y ESTADO
 // ─────────────────────────────────────────────────────────────
 
 async function fetchPrice(ticker) {
@@ -466,11 +448,12 @@ function addHistory(type, ticker, qty, price, market) {
 function updateStats(type, amount, market) {
   state.stats.ops++;
   if(type === 'buy') state.stats.buys++;
+  if(type === 'sell') state.stats.sells++;
   if(market === 'ES') state.stats.opsEs++; else state.stats.opsUs++;
 }
 
 // ─────────────────────────────────────────────────────────────
-// INTERFAZ Y UTILIDADES
+// INTERFAZ, UTILIDADES Y FUNCIONES QUE FALTABAN
 // ─────────────────────────────────────────────────────────────
 
 function updateUI() {
@@ -488,6 +471,10 @@ function updateUI() {
   document.getElementById("mkt-us").classList.toggle("active", !isEs);
   
   renderPortfolio();
+  populateSellSelect();
+  updateNetWorth();
+  renderHistory();
+  renderStats();
 }
 
 function renderPortfolio() {
@@ -499,6 +486,7 @@ function renderPortfolio() {
   if(portfolio.length === 0) {
     container.innerHTML = '<tr><td colspan="6" class="empty-row">No hay posiciones</td></tr>';
     document.getElementById("portfolio-value").textContent = formatAmount(0, currency);
+    document.getElementById("portfolio-total").textContent = formatAmount(state.market === "ES" ? state.balanceEs : state.balanceUs, currency);
     return;
   }
 
@@ -524,6 +512,56 @@ function renderPortfolio() {
 
   document.getElementById("portfolio-value").textContent = formatAmount(totalValue, currency);
   document.getElementById("portfolio-total").textContent = formatAmount(totalValue + (state.market === "ES" ? state.balanceEs : state.balanceUs), currency);
+}
+
+function updateNetWorth() {
+  let totalPortfolioEs = 0;
+  let totalPortfolioUs = 0;
+  
+  state.portfolioEs.forEach(pos => {
+      totalPortfolioEs += (pos.currentPrice || pos.price) * pos.qty;
+  });
+  state.portfolioUs.forEach(pos => {
+      totalPortfolioUs += (pos.currentPrice || pos.price) * pos.qty;
+  });
+
+  // Cálculo en Euros sumando todo (usando exchange rate para convertir USD a EUR)
+  const totalEur = state.balanceEs + totalPortfolioEs + ((state.balanceUs + totalPortfolioUs) / state.exchangeRate);
+  const totalCostEur = INITIAL_BALANCE_ES + (INITIAL_BALANCE_US / state.exchangeRate);
+
+  document.getElementById("header-networth").textContent = formatAmount(totalEur, "EUR");
+
+  const pl = totalEur - totalCostEur;
+  const plEl = document.getElementById("header-pl");
+  plEl.textContent = `${pl >= 0 ? '+' : ''}${formatAmount(pl, "EUR")}`;
+  
+  const headerPlPill = document.getElementById("header-pl-pill");
+  if (pl >= 0) {
+     headerPlPill.classList.add("gain");
+     headerPlPill.classList.remove("loss");
+  } else {
+     headerPlPill.classList.add("loss");
+     headerPlPill.classList.remove("gain");
+  }
+}
+
+function renderStats() {
+  document.getElementById("stat-ops").textContent = state.stats.ops;
+  document.getElementById("stat-buys").textContent = state.stats.buys;
+  document.getElementById("stat-sells").textContent = state.stats.sells;
+  document.getElementById("stat-ops-es").textContent = state.stats.opsEs;
+  document.getElementById("stat-ops-us").textContent = state.stats.opsUs;
+  
+  const plEsEl = document.getElementById("stat-pl-es");
+  plEsEl.textContent = formatAmount(state.stats.plEs, "EUR");
+  plEsEl.className = `stat-card-val ${state.stats.plEs >= 0 ? 'green' : 'red'}`;
+  
+  const plUsEl = document.getElementById("stat-pl-us");
+  plUsEl.textContent = formatAmount(state.stats.plUs, "USD");
+  plUsEl.className = `stat-card-val ${state.stats.plUs >= 0 ? 'green' : 'red'}`;
+
+  document.getElementById("stat-best").textContent = state.stats.best ? `${state.stats.best.ticker} (+${(state.stats.best.pct*100).toFixed(2)}%)` : "—";
+  document.getElementById("stat-worst").textContent = state.stats.worst ? `${state.stats.worst.ticker} (${(state.stats.worst.pct*100).toFixed(2)}%)` : "—";
 }
 
 function getCurrency() { return state.market === "ES" ? "EUR" : "USD"; }
@@ -557,6 +595,7 @@ function switchTab(tab) {
   document.getElementById("tab-sell").classList.toggle("active", tab === 'sell');
   document.getElementById("form-buy").classList.toggle("hidden", tab !== 'buy');
   document.getElementById("form-sell").classList.toggle("hidden", tab !== 'sell');
+  if (tab === 'sell') populateSellSelect();
 }
 
 function showToast(msg, type) {
@@ -582,15 +621,250 @@ function renderTickerChips() {
   });
 }
 
-function refreshPortfolio() {}
-function onSellTickerChange() {}
-function updateSellReturn() {}
-function executeSell() {}
-function filterHistory() {}
-function closeTransferModal() {}
-function executeTransfer() {}
-function closeResetModal() {}
-function confirmReset() {}
-function loadExchangeRate() {}
-function setTransferDir() {}
-function updateTransferPreview() {}
+// ─────────────────────────────────────────────────────────────
+// IMPLEMENTACIÓN DE LAS FUNCIONES RESTANTES
+// ─────────────────────────────────────────────────────────────
+
+async function refreshPortfolio() {
+  const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
+  if (portfolio.length === 0) return;
+  
+  const btn = document.querySelector(".btn-refresh");
+  if (btn) btn.textContent = "↻ Cargando...";
+  
+  for(let pos of portfolio) {
+    try {
+      const price = await fetchPrice(pos.ticker);
+      pos.currentPrice = price;
+    } catch(e) {}
+  }
+  
+  updateUI();
+  if (btn) btn.textContent = "↻ ACTUALIZAR";
+}
+
+function populateSellSelect() {
+  const select = document.getElementById("sell-ticker");
+  const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
+  select.innerHTML = '<option value="">— Selecciona —</option>';
+  portfolio.forEach(p => {
+    select.innerHTML += `<option value="${p.ticker}">${p.ticker} (${p.qty} accs)</option>`;
+  });
+}
+
+async function onSellTickerChange() {
+  const ticker = document.getElementById("sell-ticker").value;
+  if(!ticker) {
+    document.getElementById("sell-price").textContent = "—";
+    document.getElementById("sell-max").textContent = "0";
+    return;
+  }
+  const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
+  const pos = portfolio.find(p => p.ticker === ticker);
+  document.getElementById("sell-max").textContent = pos ? pos.qty : 0;
+  document.getElementById("sell-price").textContent = "Cargando...";
+  
+  try {
+    const price = await fetchPrice(ticker);
+    document.getElementById("sell-price").dataset.price = price;
+    document.getElementById("sell-price").textContent = formatAmount(price, getCurrency());
+    if(pos) pos.currentPrice = price; 
+    updateSellReturn();
+  } catch(e) {
+    document.getElementById("sell-price").textContent = "Error";
+  }
+}
+
+function updateSellReturn() {
+  const price = parseFloat(document.getElementById("sell-price").dataset.price) || 0;
+  const qty = parseInt(document.getElementById("sell-qty").value) || 0;
+  const ticker = document.getElementById("sell-ticker").value;
+  const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
+  const pos = portfolio.find(p => p.ticker === ticker);
+
+  if(pos && qty > 0) {
+    const returnAmt = price * qty;
+    const pnl = returnAmt - (pos.price * qty);
+    document.getElementById("sell-total-return").textContent = formatAmount(returnAmt, getCurrency());
+    const pnlEl = document.getElementById("sell-pnl-est");
+    pnlEl.textContent = formatAmount(pnl, getCurrency());
+    pnlEl.className = pnl >= 0 ? "green" : "red";
+  } else {
+    document.getElementById("sell-total-return").textContent = "—";
+    document.getElementById("sell-pnl-est").textContent = "—";
+    document.getElementById("sell-pnl-est").className = "";
+  }
+}
+
+function executeSell() {
+  const ticker = document.getElementById("sell-ticker").value;
+  const price = parseFloat(document.getElementById("sell-price").dataset.price);
+  const qty = parseInt(document.getElementById("sell-qty").value);
+  const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
+  const pos = portfolio.find(p => p.ticker === ticker);
+
+  if(!pos || qty <= 0 || qty > pos.qty) return showToast("Cantidad inválida", "error");
+
+  const returnAmt = price * qty;
+  const pnl = returnAmt - (pos.price * qty);
+
+  if(state.market === "ES") {
+    state.balanceEs += returnAmt;
+    state.stats.plEs += pnl;
+  } else {
+    state.balanceUs += returnAmt;
+    state.stats.plUs += pnl;
+  }
+
+  const pnlPct = (price / pos.price) - 1;
+  if(!state.stats.best || pnlPct > state.stats.best.pct) state.stats.best = { ticker, pct: pnlPct };
+  if(!state.stats.worst || pnlPct < state.stats.worst.pct) state.stats.worst = { ticker, pct: pnlPct };
+
+  pos.qty -= qty;
+  if(pos.qty === 0) {
+    const idx = portfolio.indexOf(pos);
+    portfolio.splice(idx, 1);
+  }
+
+  addHistory("VENTA", ticker, qty, price, state.market);
+  updateStats("sell", returnAmt, state.market);
+  
+  saveToLS();
+  updateUI();
+  
+  document.getElementById("sell-qty").value = "";
+  document.getElementById("sell-ticker").value = "";
+  onSellTickerChange();
+
+  showToast(`Vendidas ${qty} ${ticker}`, "success");
+}
+
+function renderHistory(filter = 'all') {
+  const container = document.getElementById("history-list");
+  container.innerHTML = "";
+  let filtered = state.history;
+  
+  if(filter !== 'all') {
+    filtered = state.history.filter(h => h.market === filter || (filter === 'xfer' && h.type === 'TRASP.'));
+  }
+  
+  if(filtered.length === 0) {
+    container.innerHTML = '<div class="empty-history">Aún no hay operaciones</div>';
+    return;
+  }
+  
+  filtered.forEach(h => {
+    const isEs = h.market === 'ES';
+    const curr = isEs ? 'EUR' : 'USD';
+    const val = h.type === 'TRASP.' ? `Tipo: ${h.price.toFixed(4)}` : formatAmount(h.price * h.qty, curr);
+    
+    container.innerHTML += `
+      <div class="history-item ${h.type.toLowerCase() === 'venta' ? 'sell' : (h.type === 'TRASP.' ? 'xfer' : 'buy')}">
+        <span class="history-badge" style="background:${h.type === 'COMPRA' ? 'rgba(0,255,136,0.1)' : (h.type === 'VENTA' ? 'rgba(255,58,92,0.1)' : 'rgba(0,229,255,0.1)')}; color:${h.type === 'COMPRA' ? 'var(--neon-green)' : (h.type === 'VENTA' ? 'var(--neon-red)' : 'var(--neon-cyan)')}">${h.type}</span>
+        <div class="history-detail">
+          <span class="history-ticker">${h.ticker}</span>
+          ${h.qty > 0 ? `<br/><span style="color:var(--text-muted)">${h.qty} @ ${formatAmount(h.price, curr)}</span>` : ''}
+        </div>
+        <span class="history-pnl">${val}</span>
+      </div>
+    `;
+  });
+}
+
+function filterHistory(f) {
+  document.querySelectorAll(".hf-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById(`hf-${f}`).classList.add("active");
+  renderHistory(f);
+}
+
+function openTransferModal() {
+  document.getElementById("modal-transfer").classList.remove("hidden");
+  loadExchangeRate();
+}
+function closeTransferModal() { 
+  document.getElementById("modal-transfer").classList.add("hidden"); 
+}
+
+function openResetModal() {
+  document.getElementById("modal-reset").classList.remove("hidden");
+}
+function closeResetModal() { 
+  document.getElementById("modal-reset").classList.add("hidden"); 
+}
+
+function confirmReset() {
+  localStorage.clear();
+  state.balanceEs = INITIAL_BALANCE_ES;
+  state.balanceUs = INITIAL_BALANCE_US;
+  state.portfolioEs = [];
+  state.portfolioUs = [];
+  state.history = [];
+  state.stats = { ops: 0, buys: 0, sells: 0, opsEs: 0, opsUs: 0, plEs: 0, plUs: 0, best: null, worst: null };
+  saveToLS();
+  updateUI();
+  closeResetModal();
+  showToast("Juego reiniciado por completo", "success");
+}
+
+async function loadExchangeRate() {
+  try {
+    const res = await fetch(CORS_PROXY + encodeURIComponent(YF_URL + "EURUSD=X?interval=1d&range=1d"));
+    const data = await res.json();
+    state.exchangeRate = data.chart.result[0].meta.regularMarketPrice;
+  } catch(e) {
+    state.exchangeRate = 1.08; // Valor de respaldo por si falla Yahoo
+  }
+  document.getElementById("er-value").textContent = `1 EUR = ${state.exchangeRate.toFixed(4)} USD`;
+  updateTransferPreview();
+}
+
+function setTransferDir(dir) {
+  state.transferDir = dir;
+  document.getElementById("dir-es-us").classList.toggle("active", dir === "ES_TO_US");
+  document.getElementById("dir-us-es").classList.toggle("active", dir === "US_TO_ES");
+  document.getElementById("transfer-amount").value = "";
+  updateTransferPreview();
+}
+
+function updateTransferPreview() {
+  const amt = parseFloat(document.getElementById("transfer-amount").value) || 0;
+  const isEsToUs = state.transferDir === "ES_TO_US";
+  
+  document.getElementById("transfer-label").textContent = isEsToUs ? "IMPORTE EN EUR A ENVIAR" : "IMPORTE EN USD A ENVIAR";
+  document.getElementById("tp-from-lbl").textContent = isEsToUs ? "Envías desde 🇪🇸" : "Envías desde 🇺🇸";
+  document.getElementById("tp-to-lbl").textContent = isEsToUs ? "Recibes en 🇺🇸" : "Recibes en 🇪🇸";
+  
+  document.getElementById("tp-from-val").textContent = formatAmount(amt, isEsToUs ? "EUR" : "USD");
+  
+  let received = isEsToUs ? amt * state.exchangeRate : amt / state.exchangeRate;
+  document.getElementById("tp-to-val").textContent = formatAmount(received, isEsToUs ? "USD" : "EUR");
+
+  document.getElementById("transfer-balances").innerHTML = `
+    <span>Saldo Disp: ${formatAmount(isEsToUs ? state.balanceEs : state.balanceUs, isEsToUs ? 'EUR' : 'USD')}</span>
+  `;
+}
+
+function executeTransfer() {
+  const amt = parseFloat(document.getElementById("transfer-amount").value);
+  if(!amt || amt <= 0) return showToast("Importe inválido", "error");
+
+  const isEsToUs = state.transferDir === "ES_TO_US";
+  if(isEsToUs && state.balanceEs < amt) return showToast("Saldo EUR insuficiente", "error");
+  if(!isEsToUs && state.balanceUs < amt) return showToast("Saldo USD insuficiente", "error");
+
+  let received = isEsToUs ? amt * state.exchangeRate : amt / state.exchangeRate;
+  
+  if(isEsToUs) {
+    state.balanceEs -= amt;
+    state.balanceUs += received;
+  } else {
+    state.balanceUs -= amt;
+    state.balanceEs += received;
+  }
+
+  addHistory("TRASP.", isEsToUs ? "EUR->USD" : "USD->EUR", 0, state.exchangeRate, isEsToUs ? "ES" : "US");
+  saveToLS();
+  updateUI();
+  closeTransferModal();
+  showToast("Transferencia completada", "success");
+}
