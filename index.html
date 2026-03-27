@@ -98,13 +98,6 @@
           </div>
         </div>
 
-        <div class="chart-container" id="inline-chart-container">
-          <div class="chart-header">
-            <span id="chart-title">📊 ANÁLISIS TÉCNICO (3 MESES)</span>
-          </div>
-          <canvas id="inline-chart" width="400" height="200"></canvas>
-        </div>
-
         <div class="form-group">
           <label class="form-label">CANTIDAD (acciones)</label>
           <input type="number" id="buy-qty" class="game-input" placeholder="0" min="1" step="1"
@@ -252,6 +245,25 @@
 
     </section>
   </main>
+
+  <div class="modal-overlay hidden" id="modal-asset">
+    <div class="modal-box modal-wide">
+      <h3 class="modal-title" id="asset-title" style="color:var(--neon-cyan)">Nombre de la Empresa</h3>
+      <p class="modal-text" style="margin-bottom: 12px; font-size: 1.05rem;">
+        Ticker: <strong id="asset-ticker" style="color:var(--neon-yellow)"></strong> <br>
+        Precio actual: <strong id="asset-price" style="color:var(--neon-green)">Cargando...</strong>
+      </p>
+      
+      <canvas id="asset-chart" width="400" height="200" style="background: var(--bg-input); border: 1px solid var(--border-panel); border-radius: var(--radius); width: 100%; margin-bottom: 15px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5);"></canvas>
+      
+      <p class="modal-text" style="font-size: 0.75rem; margin-top: -10px; margin-bottom: 15px;">Evolución de los últimos 3 meses</p>
+
+      <div class="modal-buttons">
+        <button class="btn-modal-cancel" onclick="closeAssetModal()">CERRAR</button>
+        <button class="btn-modal-confirm btn-cyan" onclick="selectAssetForBuy()">PREPARAR COMPRA</button>
+      </div>
+    </div>
+  </div>
 
   <div class="modal-overlay hidden" id="modal-transfer">
     <div class="modal-box modal-wide">
