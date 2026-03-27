@@ -1,8 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
-   STOCKQUEST — script.js
+   PANDU INVESTOR — script.js
    Dos mercados independientes: 🇪🇸 ES (EUR) y 🇺🇸 US (USD)
-   Transferencias entre carteras con tipo de cambio real EUR/USD
-   Todos los datos guardados en localStorage
    ═══════════════════════════════════════════════════════════════ */
 
 "use strict";
@@ -11,10 +9,9 @@
 // CONSTANTES
 // ─────────────────────────────────────────────────────────────
 
-const INITIAL_BALANCE_ES = 5000;   // saldo inicial España en EUR
-const INITIAL_BALANCE_US = 0;      // saldo inicial USA en USD (se obtiene por transferencia)
+const INITIAL_BALANCE_ES = 5000;   
+const INITIAL_BALANCE_US = 0;      
 
-/** Claves de localStorage */
 const LS_KEYS = {
   balanceEs:   "sq_balance_es",
   balanceUs:   "sq_balance_us",
@@ -25,85 +22,55 @@ const LS_KEYS = {
   market:      "sq_market",
 };
 
-/**
- * Proxy CORS público para saltarse las restricciones de Yahoo Finance.
- * Cambia este valor si el proxy deja de funcionar.
- */
 const CORS_PROXY = "https://corsproxy.io/?";
 const YF_URL     = "https://query1.finance.yahoo.com/v8/finance/chart/";
+const YF_SEARCH  = "https://query2.finance.yahoo.com/v1/finance/search?q=";
 
-/**
- * API de tipo de cambio EUR/USD (pública, sin clave).
- * Usamos la API de Frankfurt (gratuita).
- */
 const EXCHANGE_API = "https://api.frankfurter.app/latest?from=EUR&to=USD";
 
-// ─────────────────────────────────────────────────────────────
-// TICKERS SUGERIDOS POR MERCADO
-// ─────────────────────────────────────────────────────────────
-
 const SUGGESTED_TICKERS = {
-  ES: ["IBE.MC", "BBVA.MC", "SAN.MC", "ITX.MC", "REP.MC", "TEF.MC", "AMS.MC", "ACX.MC", "FER.MC", "IAG.MC"],
-  US: ["AAPL",   "MSFT",    "TSLA",   "NVDA",   "AMZN",   "GOOGL",  "META",   "NFLX",   "SPY",    "QQQ"],
+  ES: ["IBE.MC", "BBVA.MC", "SAN.MC", "ITX.MC", "REP.MC", "TEF.MC", "IAG.MC"],
+  US: ["AAPL", "MSFT", "TSLA", "NVDA", "AMZN", "GOOGL", "META"],
 };
 
 // ─────────────────────────────────────────────────────────────
 // ESTADO DE LA APLICACIÓN
 // ─────────────────────────────────────────────────────────────
 
-/** Mercado activo: 'ES' o 'US' */
 let activeMarket = "ES";
-
-/** Saldos independientes por mercado */
 let balanceEs = INITIAL_BALANCE_ES;
 let balanceUs = INITIAL_BALANCE_US;
-
-/**
- * Carteras independientes. Clave: ticker. Valor: { qty, avgPrice }
- * portfolioEs → acciones con precios en EUR
- * portfolioUs → acciones con precios en USD
- */
 let portfolioEs = {};
 let portfolioUs = {};
-
-/**
- * Historial global de operaciones. Cada entrada:
- * { type: 'buy'|'sell'|'xfer', market: 'ES'|'US'|'XFER',
- *   ticker?, qty?, price?, total?, pnl?, date,
- *   // para transferencias:
- *   dir?, amountFrom?, amountTo?, currency?, rate? }
- */
 let history = [];
+let stats = { totalPlEs: 0, totalPlUs: 0, bestOp: null, worstOp: null };
 
-/** Estadísticas globales */
-let stats = {
-  totalPlEs: 0,   // P&L realizado en EUR
-  totalPlUs: 0,   // P&L realizado en USD
-  bestOp: null,   // { ticker, pnl, currency }
-  worstOp: null,
-};
-
-/** Tipo de cambio EUR/USD en caché */
 let exchangeRate = null;
-
-/** Dirección de transferencia activa en el modal */
 let transferDir = "ES_TO_US";
-
-/** Filtro activo del historial */
 let historyFilter = "all";
 
 // ─────────────────────────────────────────────────────────────
 // INICIALIZACIÓN
 // ─────────────────────────────────────────────────────────────
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   loadFromStorage();
   renderAll();
   renderTickerChips();
 
-  // Eventos de botones de cabecera
   document.getElementById("btn-reset").addEventListener("click", openResetModal);
   document.getElementById("btn-transfer").addEventListener("click", openTransferModal);
+
+  // Carga tipo de cambio de fondo para Patrimonio Total
+  await loadExchangeRate(true); 
+
+  // Cerrar sugerencias si se hace clic fuera
+  document.addEventListener("click", (e) => {
+    const wrapper = document.getElementById("search-suggestions");
+    if (wrapper && !e.target.closest(".autocomplete-wrapper")) {
+      wrapper.style.display = "none";
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -123,7 +90,6 @@ function saveToStorage() {
 function loadFromStorage() {
   const saved = localStorage.getItem(LS_KEYS.balanceEs);
   if (saved === null) {
-    // Primera visita: valores por defecto
     resetState();
     saveToStorage();
     return;
@@ -138,80 +104,44 @@ function loadFromStorage() {
 }
 
 function resetState() {
-  balanceEs   = INITIAL_BALANCE_ES;
-  balanceUs   = INITIAL_BALANCE_US;
-  portfolioEs = {};
-  portfolioUs = {};
-  history     = [];
-  stats       = { totalPlEs: 0, totalPlUs: 0, bestOp: null, worstOp: null };
+  balanceEs = INITIAL_BALANCE_ES; balanceUs = INITIAL_BALANCE_US;
+  portfolioEs = {}; portfolioUs = {}; history = [];
+  stats = { totalPlEs: 0, totalPlUs: 0, bestOp: null, worstOp: null };
   activeMarket = "ES";
 }
 
 // ─────────────────────────────────────────────────────────────
-// HELPERS: acceso a datos del mercado activo
+// HELPERS
 // ─────────────────────────────────────────────────────────────
 
 function getBalance()       { return activeMarket === "ES" ? balanceEs : balanceUs; }
 function getPortfolio()     { return activeMarket === "ES" ? portfolioEs : portfolioUs; }
 function getCurrency()      { return activeMarket === "ES" ? "EUR" : "USD"; }
 function getCurrencySymbol(){ return activeMarket === "ES" ? "€" : "$"; }
+function setBalance(val)    { if (activeMarket === "ES") balanceEs = val; else balanceUs = val; }
 
-function setBalance(val) {
-  if (activeMarket === "ES") balanceEs = val; else balanceUs = val;
-}
+function getPortfolioFor(market) { return market === "ES" ? portfolioEs : portfolioUs; }
 
-// ─────────────────────────────────────────────────────────────
-// CAMBIO DE MERCADO
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Cambia el mercado activo y actualiza toda la UI.
- * @param {'ES'|'US'} market
- */
 function setMarket(market) {
   activeMarket = market;
   saveToStorage();
 
-  // Actualizar botones del switcher
   document.getElementById("mkt-es").classList.toggle("active", market === "ES");
   document.getElementById("mkt-us").classList.toggle("active", market === "US");
-
-  // Clase en body para theming CSS
   document.body.classList.toggle("market-es", market === "ES");
   document.body.classList.toggle("market-us", market === "US");
 
-  // Actualizar banner
   const isEs = market === "ES";
   document.getElementById("mb-flag").textContent = isEs ? "🇪🇸" : "🇺🇸";
-  document.getElementById("mb-name").textContent = isEs
-    ? "MERCADO ESPAÑOL — IBEX 35 & BME"
-    : "MERCADO AMERICANO — NYSE / NASDAQ";
-  document.getElementById("mb-hint").textContent = isEs
-    ? "IBE.MC · BBVA.MC · SAN.MC · ITX.MC · REP.MC · TEF.MC · AMS.MC · ACX.MC"
-    : "AAPL · MSFT · TSLA · NVDA · AMZN · GOOGL · META · NFLX · SPY · QQQ";
+  document.getElementById("mb-name").textContent = isEs ? "MERCADO ESPAÑOL — IBEX 35 & BME" : "MERCADO AMERICANO — NYSE / NASDAQ";
+  
+  document.getElementById("portfolio-panel-title").textContent = isEs ? "🎮 CARTERA ESPAÑOLA" : "🎮 CARTERA AMERICANA";
 
-  // Actualizar panel de trading
-  document.getElementById("buy-ticker-label").textContent =
-    isEs ? "TICKER (mercado español)" : "TICKER (mercado americano)";
-  document.getElementById("buy-ticker").placeholder =
-    isEs ? "Ej: IBE.MC, BBVA.MC" : "Ej: AAPL, TSLA, MSFT";
-  document.getElementById("portfolio-panel-title").textContent =
-    isEs ? "🎮 CARTERA ESPAÑOLA" : "🎮 CARTERA AMERICANA";
-
-  // Limpiar formulario de compra
   resetBuyForm();
-
-  // Actualizar chips y selects
   renderTickerChips();
   populateSellSelect();
-
-  // Re-renderizar
   renderAll();
 }
-
-// ─────────────────────────────────────────────────────────────
-// CHIPS DE TICKERS SUGERIDOS
-// ─────────────────────────────────────────────────────────────
 
 function renderTickerChips() {
   const container = document.getElementById("ticker-chips");
@@ -221,15 +151,10 @@ function renderTickerChips() {
   ).join("");
 }
 
-/** Rellena el campo de ticker al hacer clic en un chip */
 function selectTicker(ticker) {
   document.getElementById("buy-ticker").value = ticker;
   fetchBuyPrice();
 }
-
-// ─────────────────────────────────────────────────────────────
-// PESTAÑA COMPRA / VENTA
-// ─────────────────────────────────────────────────────────────
 
 function switchTab(tab) {
   document.getElementById("form-buy").classList.toggle("hidden",  tab !== "buy");
@@ -240,14 +165,159 @@ function switchTab(tab) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// API: PRECIO DE YAHOO FINANCE
+// BUSCADOR / AUTOCOMPLETADO
+// ─────────────────────────────────────────────────────────────
+let searchTimeout;
+document.getElementById("buy-ticker").addEventListener("input", (e) => {
+  clearTimeout(searchTimeout);
+  const q = e.target.value.trim();
+  if(q.length < 2) { 
+    document.getElementById("search-suggestions").style.display = "none"; 
+    return; 
+  }
+  searchTimeout = setTimeout(() => fetchSuggestions(q), 400);
+});
+
+async function fetchSuggestions(query) {
+  try {
+    const targetUrl = `${YF_SEARCH}${encodeURIComponent(query)}&quotesCount=5&newsCount=0`;
+    const res = await fetch(CORS_PROXY + encodeURIComponent(targetUrl));
+    const data = await res.json();
+    const quotes = data.quotes || [];
+    renderSuggestions(quotes);
+  } catch (err) {
+    console.error("Error buscando sugerencias:", err);
+  }
+}
+
+function renderSuggestions(quotes) {
+  const container = document.getElementById("search-suggestions");
+  container.innerHTML = "";
+  if (quotes.length === 0) {
+    container.style.display = "none";
+    return;
+  }
+  quotes.forEach(q => {
+    // Filtrar para mostrar más resultados lógicos
+    if(!q.symbol || (!q.shortname && !q.longname)) return;
+    const name = q.shortname || q.longname;
+    const div = document.createElement("div");
+    div.className = "suggestion-item";
+    div.innerHTML = `<span class="sugg-ticker">${q.symbol}</span><span class="sugg-name">${name} (${q.exchDisp || 'Mercado'})</span>`;
+    
+    div.onclick = () => {
+      document.getElementById("buy-ticker").value = q.symbol;
+      container.style.display = "none";
+      openAssetModal(q.symbol, name); // Abrir info del activo
+    };
+    container.appendChild(div);
+  });
+  container.style.display = "block";
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// MODAL DE ACTIVO (INFO Y GRÁFICA)
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Obtiene el precio actual de un ticker desde Yahoo Finance.
- * @param {string} ticker - Ej: "IBE.MC" o "AAPL"
- * @returns {Promise<number>}
- */
+async function openAssetModal(ticker, name) {
+  document.getElementById("modal-asset").classList.remove("hidden");
+  document.getElementById("asset-title").textContent = name || ticker;
+  document.getElementById("asset-ticker").textContent = ticker;
+  document.getElementById("asset-price").textContent = "Cargando...";
+
+  const canvas = document.getElementById("asset-chart");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Texto de carga en canvas
+  ctx.fillStyle = "#5a7a9a";
+  ctx.font = "14px 'Share Tech Mono'";
+  ctx.fillText("Obteniendo datos de mercado...", 20, 30);
+
+  try {
+    // Pedimos 3 meses de historia
+    const targetUrl = `${YF_URL}${encodeURIComponent(ticker)}?interval=1d&range=3mo`;
+    const res = await fetch(CORS_PROXY + encodeURIComponent(targetUrl));
+    if(!res.ok) throw new Error("No data");
+    const data = await res.json();
+    const result = data.chart.result[0];
+    const closePrices = result.indicators.quote[0].close;
+    
+    // Filtrar nulls
+    const validPrices = closePrices.filter(p => p !== null);
+    
+    if(validPrices.length > 0) {
+      drawChart(ctx, canvas, validPrices);
+      const currentPrice = validPrices[validPrices.length-1];
+      // Si el ticker es americano o español
+      const cur = activeMarket === "ES" ? (ticker.includes(".MC") || ticker.includes(".MA") ? "EUR" : "USD") : "USD";
+      document.getElementById("asset-price").textContent = formatAmount(currentPrice, cur);
+    } else {
+      throw new Error("No valid prices");
+    }
+
+  } catch(e) {
+    ctx.clearRect(0,0, canvas.width, canvas.height);
+    ctx.fillText("Gráfica no disponible para este activo.", 20, 30);
+  }
+}
+
+function closeAssetModal() {
+  document.getElementById("modal-asset").classList.add("hidden");
+}
+
+function selectAssetForBuy() {
+  const ticker = document.getElementById("asset-ticker").textContent;
+  document.getElementById("buy-ticker").value = ticker;
+  closeAssetModal();
+  fetchBuyPrice(); // Autocargar precio en el panel
+}
+
+function drawChart(ctx, canvas, prices) {
+  if (!prices || prices.length < 2) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const padding = 25;
+
+  const minP = Math.min(...prices);
+  const maxP = Math.max(...prices);
+  const rangeP = maxP - minP || 1;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.beginPath();
+  
+  // Si sube o baja, cambiamos color
+  const isUp = prices[prices.length-1] >= prices[0];
+  ctx.strokeStyle = isUp ? "#00ff88" : "#ff3a5c"; 
+  ctx.lineWidth = 2.5;
+
+  prices.forEach((p, i) => {
+    const x = padding + (i / (prices.length - 1)) * (w - padding * 2);
+    const y = h - padding - ((p - minP) / rangeP) * (h - padding * 2);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Sombras/Glow
+  ctx.shadowBlur = 10;
+  ctx.shadowColor = isUp ? "#00ff88" : "#ff3a5c";
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Textos
+  ctx.fillStyle = "#e8f4ff";
+  ctx.font = "11px sans-serif";
+  ctx.fillText(maxP.toFixed(2), 2, padding + 4);
+  ctx.fillText(minP.toFixed(2), 2, h - padding + 4);
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// PRECIOS DE YAHOO
+// ─────────────────────────────────────────────────────────────
+
 async function fetchPrice(ticker) {
   ticker = ticker.toUpperCase().trim();
   const targetUrl = `${YF_URL}${encodeURIComponent(ticker)}?interval=1m&range=1d`;
@@ -258,7 +328,7 @@ async function fetchPrice(ticker) {
 
   const data   = await res.json();
   const result = data?.chart?.result?.[0];
-  if (!result) throw new Error("Ticker no encontrado");
+  if (!result) throw new Error("No encontrado");
 
   const price = result.meta?.regularMarketPrice || result.meta?.previousClose;
   if (!price || price <= 0) throw new Error("Precio inválido");
@@ -266,17 +336,12 @@ async function fetchPrice(ticker) {
   return parseFloat(price.toFixed(4));
 }
 
-// ─────────────────────────────────────────────────────────────
-// COMPRA: OBTENER PRECIO
-// ─────────────────────────────────────────────────────────────
-
 async function fetchBuyPrice() {
   const ticker = document.getElementById("buy-ticker").value.trim().toUpperCase();
   if (!ticker) { showToast("Introduce un ticker", "error"); return; }
 
   const priceEl = document.getElementById("buy-price");
   const badgeEl = document.getElementById("buy-badge");
-  const sym     = getCurrencySymbol();
 
   priceEl.textContent    = "Cargando…";
   priceEl.dataset.price  = "";
@@ -294,7 +359,7 @@ async function fetchBuyPrice() {
   } catch (err) {
     priceEl.textContent    = "Error";
     priceEl.dataset.price  = "";
-    showToast(`No se pudo obtener ${ticker}: ${err.message}`, "error");
+    showToast(`No se pudo obtener ${ticker}. Intenta usar el buscador.`, "error");
   }
 }
 
@@ -303,25 +368,16 @@ function updateBuyCost() {
   const qty   = parseInt(document.getElementById("buy-qty").value) || 0;
   const total = price * qty;
   const bal   = getBalance();
-  const sym   = getCurrencySymbol();
   const cur   = getCurrency();
 
-  document.getElementById("buy-total-cost").textContent =
-    total > 0 ? formatAmount(total, cur) : "—";
+  document.getElementById("buy-total-cost").textContent = total > 0 ? formatAmount(total, cur) : "—";
 
-  // Indicador de saldo disponible
   const hint = document.getElementById("buy-balance-hint");
   if (price > 0) {
     hint.textContent = `Saldo disponible: ${formatAmount(bal, cur)}`;
     hint.style.color = total > bal ? "var(--neon-red)" : "var(--text-muted)";
-  } else {
-    hint.textContent = "";
-  }
+  } else { hint.textContent = ""; }
 }
-
-// ─────────────────────────────────────────────────────────────
-// COMPRA: EJECUTAR
-// ─────────────────────────────────────────────────────────────
 
 async function executeBuy() {
   const ticker = document.getElementById("buy-ticker").value.trim().toUpperCase();
@@ -333,12 +389,7 @@ async function executeBuy() {
   showTradeMsg("buy", "Consultando precio real…", "");
 
   let price;
-  try {
-    price = await fetchPrice(ticker);
-  } catch (err) {
-    showTradeMsg("buy", `✗ ${err.message}`, "error");
-    return;
-  }
+  try { price = await fetchPrice(ticker); } catch (err) { showTradeMsg("buy", `✗ ${err.message}`, "error"); return; }
 
   const total = price * qty;
   const bal   = getBalance();
@@ -350,18 +401,14 @@ async function executeBuy() {
     return;
   }
 
-  // Descontar saldo
   setBalance(bal - total);
 
-  // Actualizar cartera: precio medio ponderado
   if (port[ticker]) {
     const { qty: oldQty, avgPrice: oldAvg } = port[ticker];
     const newQty = oldQty + qty;
     const newAvg = ((oldAvg * oldQty) + (price * qty)) / newQty;
     port[ticker] = { qty: newQty, avgPrice: parseFloat(newAvg.toFixed(4)) };
-  } else {
-    port[ticker] = { qty, avgPrice: price };
-  }
+  } else { port[ticker] = { qty, avgPrice: price }; }
 
   addHistory({ type: "buy", market: activeMarket, ticker, qty, price, total, pnl: null });
   saveToStorage();
@@ -369,12 +416,13 @@ async function executeBuy() {
   populateSellSelect();
   resetBuyForm();
 
-  showTradeMsg("buy", `✔ ${qty}x ${ticker} compradas a ${formatAmount(price, cur)}`, "success");
+  showTradeMsg("buy", `✔ ${qty}x ${ticker} a ${formatAmount(price, cur)}`, "success");
   showToast(`✔ COMPRA: ${qty}x ${ticker}`, "success");
+  updateGlobalNetWorth(); // Refrescar patrimonio total
 }
 
 // ─────────────────────────────────────────────────────────────
-// VENTA: SELECTOR
+// VENTA
 // ─────────────────────────────────────────────────────────────
 
 function populateSellSelect() {
@@ -397,10 +445,7 @@ async function onSellTickerChange() {
   const priceEl = document.getElementById("sell-price");
   const maxEl   = document.getElementById("sell-max");
 
-  // Reset
-  priceEl.textContent = "—";
-  priceEl.dataset.price = "";
-  priceEl.dataset.avgPrice = "";
+  priceEl.textContent = "—"; priceEl.dataset.price = ""; priceEl.dataset.avgPrice = "";
   document.getElementById("sell-qty").value = "";
   document.getElementById("sell-total-return").textContent = "—";
   document.getElementById("sell-pnl-est").textContent     = "—";
@@ -411,7 +456,6 @@ async function onSellTickerChange() {
   const port = getPortfolio();
   const pos  = port[ticker];
   maxEl.textContent = pos.qty;
-
   priceEl.textContent = "Cargando…";
 
   try {
@@ -423,8 +467,7 @@ async function onSellTickerChange() {
     setTimeout(() => priceEl.classList.remove("price-pop"), 500);
     document.getElementById("sell-badge").textContent = "EN VIVO";
   } catch (err) {
-    priceEl.textContent = "Error";
-    showToast(`Error obteniendo precio de ${ticker}`, "error");
+    priceEl.textContent = "Error"; showToast(`Error obteniendo precio`, "error");
   }
 }
 
@@ -437,22 +480,14 @@ function updateSellReturn() {
   const returnTotal = qty * price;
   const pnl         = qty * (price - avgPrice);
 
-  document.getElementById("sell-total-return").textContent =
-    returnTotal > 0 ? formatAmount(returnTotal, cur) : "—";
-
+  document.getElementById("sell-total-return").textContent = returnTotal > 0 ? formatAmount(returnTotal, cur) : "—";
   const pnlEl = document.getElementById("sell-pnl-est");
+  
   if (qty > 0 && price > 0) {
     pnlEl.textContent = (pnl >= 0 ? "+" : "") + formatAmount(pnl, cur);
     pnlEl.style.color = pnl > 0 ? "var(--neon-green)" : pnl < 0 ? "var(--neon-red)" : "var(--text-muted)";
-  } else {
-    pnlEl.textContent = "—";
-    pnlEl.style.color = "";
-  }
+  } else { pnlEl.textContent = "—"; pnlEl.style.color = ""; }
 }
-
-// ─────────────────────────────────────────────────────────────
-// VENTA: EJECUTAR
-// ─────────────────────────────────────────────────────────────
 
 async function executeSell() {
   const ticker = document.getElementById("sell-ticker").value;
@@ -469,28 +504,17 @@ async function executeSell() {
   showTradeMsg("sell", "Consultando precio real…", "");
 
   let price;
-  try {
-    price = await fetchPrice(ticker);
-  } catch (err) {
-    showTradeMsg("sell", `✗ ${err.message}`, "error");
-    return;
-  }
+  try { price = await fetchPrice(ticker); } catch (err) { showTradeMsg("sell", `✗ ${err.message}`, "error"); return; }
 
   const total = price * qty;
   const pnl   = (price - pos.avgPrice) * qty;
   const cur   = getCurrency();
 
-  // Actualizar saldo y cartera
   setBalance(getBalance() + total);
   const newQty = pos.qty - qty;
-  if (newQty <= 0) delete port[ticker];
-  else             port[ticker].qty = newQty;
+  if (newQty <= 0) delete port[ticker]; else port[ticker].qty = newQty;
 
-  // Estadísticas
-  if (activeMarket === "ES") stats.totalPlEs += pnl;
-  else                       stats.totalPlUs += pnl;
-
-  // Mejor / peor operación
+  if (activeMarket === "ES") stats.totalPlEs += pnl; else stats.totalPlUs += pnl;
   if (!stats.bestOp  || pnl > stats.bestOp.pnl)  stats.bestOp  = { ticker, pnl, currency: cur, market: activeMarket };
   if (!stats.worstOp || pnl < stats.worstOp.pnl) stats.worstOp = { ticker, pnl, currency: cur, market: activeMarket };
 
@@ -501,25 +525,21 @@ async function executeSell() {
 
   const pnlStr = (pnl >= 0 ? "+" : "") + formatAmount(pnl, cur);
   showTradeMsg("sell", `✔ ${qty}x ${ticker} vendidas | P&L: ${pnlStr}`, "success");
-  showToast(`${pnl >= 0 ? "📈" : "📉"} VENTA: ${qty}x ${ticker} (${pnlStr})`, pnl >= 0 ? "success" : "info");
+  showToast(`${pnl >= 0 ? "📈" : "📉"} VENTA: ${qty}x ${ticker}`, pnl >= 0 ? "success" : "info");
 
-  // Reset parcial formulario
   document.getElementById("sell-ticker").value = "";
   document.getElementById("sell-price").textContent = "—";
   document.getElementById("sell-qty").value = "";
   document.getElementById("sell-total-return").textContent = "—";
   document.getElementById("sell-pnl-est").textContent = "—";
   document.getElementById("sell-max").textContent = "0";
+
+  updateGlobalNetWorth();
 }
 
-// ─────────────────────────────────────────────────────────────
-// ACTUALIZAR PRECIOS DE CARTERA
-// ─────────────────────────────────────────────────────────────
-
 async function refreshPortfolio() {
-  const port    = getPortfolio();
+  const port = getPortfolio();
   const tickers = Object.keys(port);
-
   if (tickers.length === 0) { showToast("La cartera está vacía", "info"); return; }
 
   const btn = document.querySelector(".btn-refresh");
@@ -532,19 +552,18 @@ async function refreshPortfolio() {
 
   renderPortfolioTable(prices);
   renderPortfolioSummary(prices);
+  
   btn.classList.remove("spinning");
   showToast("✔ Precios actualizados", "success");
+  updateGlobalNetWorth();
 }
+
 
 // ─────────────────────────────────────────────────────────────
 // RENDER GLOBAL
 // ─────────────────────────────────────────────────────────────
 
 function renderAll() {
-  // Aplicar clase de mercado al body
-  document.body.classList.toggle("market-es", activeMarket === "ES");
-  document.body.classList.toggle("market-us", activeMarket === "US");
-
   renderHeader();
   renderPortfolioTable({});
   renderPortfolioSummary({});
@@ -557,15 +576,11 @@ function renderHeader() {
   document.getElementById("header-saldo-es").textContent = formatAmount(balanceEs, "EUR");
   document.getElementById("header-saldo-us").textContent = formatAmount(balanceUs, "USD");
 
-  // P&L global (mostramos el del mercado activo como referencia principal)
-  const plEs = stats.totalPlEs;
-  const plUs = stats.totalPlUs;
-  // Mostramos ambos de forma compacta
-  const plText = `${plEs >= 0 ? "+" : ""}${formatAmount(plEs,"EUR")} / ${plUs >= 0 ? "+" : ""}${formatAmount(plUs,"USD")}`;
-  document.getElementById("header-pl").textContent = plText;
-
+  const plEs = stats.totalPlEs; const plUs = stats.totalPlUs;
+  document.getElementById("header-pl").textContent = `${plEs >= 0 ? "+" : ""}${formatAmount(plEs,"EUR")} / ${plUs >= 0 ? "+" : ""}${formatAmount(plUs,"USD")}`;
+  
   const pill = document.getElementById("header-pl-pill");
-  const totalPl = plEs + plUs; // aproximado, ignora tipo de cambio
+  const totalPl = plEs + plUs; 
   pill.classList.remove("gain", "loss");
   if (totalPl > 0) pill.classList.add("gain");
   if (totalPl < 0) pill.classList.add("loss");
@@ -583,20 +598,19 @@ function renderPortfolioTable(prices) {
   }
 
   tbody.innerHTML = tickers.map(ticker => {
-    const pos          = port[ticker];
+    const pos = port[ticker];
     const currentPrice = prices[ticker] ?? null;
     const currentVal   = currentPrice !== null ? currentPrice * pos.qty : null;
     const pnl          = currentPrice !== null ? (currentPrice - pos.avgPrice) * pos.qty : null;
     const pnlClass     = pnl === null ? "td-neutral" : pnl >= 0 ? "td-pos" : "td-neg";
-    const pnlStr       = pnl === null ? "—"
-      : (pnl >= 0 ? "+" : "") + formatAmount(pnl, cur);
+    const pnlStr       = pnl === null ? "—" : (pnl >= 0 ? "+" : "") + formatAmount(pnl, cur);
 
-    return `<tr class="row-appear">
+    return `<tr>
       <td><span class="ticker-chip">${ticker}</span></td>
       <td>${pos.qty}</td>
       <td>${formatAmount(pos.avgPrice, cur)}</td>
       <td>${currentPrice !== null ? formatAmount(currentPrice, cur) : '<span class="td-neutral">—</span>'}</td>
-      <td>${currentVal  !== null ? formatAmount(currentVal,   cur) : '<span class="td-neutral">—</span>'}</td>
+      <td>${currentVal  !== null ? formatAmount(currentVal, cur) : '<span class="td-neutral">—</span>'}</td>
       <td class="${pnlClass}">${pnlStr}</td>
     </tr>`;
   }).join("");
@@ -604,172 +618,127 @@ function renderPortfolioTable(prices) {
 
 function renderPortfolioSummary(prices) {
   const port = getPortfolio();
-  const cur  = getCurrency();
   let portfolioValue = 0;
   Object.entries(port).forEach(([ticker, pos]) => {
     const p = prices[ticker] ?? pos.avgPrice;
     portfolioValue += p * pos.qty;
   });
 
-  const cash  = getBalance();
+  const cash = getBalance();
   const total = cash + portfolioValue;
+  const cur = getCurrency();
 
   document.getElementById("portfolio-value").textContent = formatAmount(portfolioValue, cur);
   document.getElementById("portfolio-cash").textContent  = formatAmount(cash, cur);
   document.getElementById("portfolio-total").textContent = formatAmount(total, cur);
 }
 
+// ─────────────────────────────────────────────────────────────
+// PATRIMONIO TOTAL (NUEVA FUNCIÓN)
+// ─────────────────────────────────────────────────────────────
+function updateGlobalNetWorth() {
+  const el = document.getElementById("header-networth");
+  if(!el) return;
+  if(!exchangeRate) { el.textContent = "Cargando..."; return; }
+  
+  let eurPortVal = 0; let usdPortVal = 0;
+  const portEs = getPortfolioFor("ES");
+  const portUs = getPortfolioFor("US");
+  
+  Object.values(portEs).forEach(p => eurPortVal += p.qty * p.avgPrice);
+  Object.values(portUs).forEach(p => usdPortVal += p.qty * p.avgPrice);
+
+  // Todo convertido a EUR
+  const totalEur = balanceEs + eurPortVal + ((balanceUs + usdPortVal) / exchangeRate);
+  el.textContent = formatAmount(totalEur, "EUR");
+}
+
+
 function renderStats() {
   const buysEs  = history.filter(h => h.type === "buy"  && h.market === "ES").length;
   const buysUs  = history.filter(h => h.type === "buy"  && h.market === "US").length;
   const sellsEs = history.filter(h => h.type === "sell" && h.market === "ES").length;
   const sellsUs = history.filter(h => h.type === "sell" && h.market === "US").length;
-  const totalBuys  = buysEs + buysUs;
-  const totalSells = sellsEs + sellsUs;
-  const totalOps   = totalBuys + totalSells;
 
-  document.getElementById("stat-ops").textContent    = totalOps;
-  document.getElementById("stat-buys").textContent   = totalBuys;
-  document.getElementById("stat-sells").textContent  = totalSells;
+  document.getElementById("stat-ops").textContent    = buysEs + buysUs + sellsEs + sellsUs;
+  document.getElementById("stat-buys").textContent   = buysEs + buysUs;
+  document.getElementById("stat-sells").textContent  = sellsEs + sellsUs;
   document.getElementById("stat-ops-es").textContent = buysEs + sellsEs;
   document.getElementById("stat-ops-us").textContent = buysUs + sellsUs;
 
-  const plEs = stats.totalPlEs;
-  const plUs = stats.totalPlUs;
+  document.getElementById("stat-pl-es").textContent = (stats.totalPlEs >= 0 ? "+" : "") + formatAmount(stats.totalPlEs, "EUR");
+  document.getElementById("stat-pl-us").textContent = (stats.totalPlUs >= 0 ? "+" : "") + formatAmount(stats.totalPlUs, "USD");
 
-  const plEsEl = document.getElementById("stat-pl-es");
-  plEsEl.textContent = (plEs >= 0 ? "+" : "") + formatAmount(plEs, "EUR");
-  plEsEl.className   = "stat-card-val " + (plEs > 0 ? "green" : plEs < 0 ? "red" : "");
-
-  const plUsEl = document.getElementById("stat-pl-us");
-  plUsEl.textContent = (plUs >= 0 ? "+" : "") + formatAmount(plUs, "USD");
-  plUsEl.className   = "stat-card-val " + (plUs > 0 ? "green" : plUs < 0 ? "red" : "");
-
-  if (stats.bestOp) {
-    const s = stats.bestOp;
-    document.getElementById("stat-best").textContent =
-      `${s.market === "ES" ? "🇪🇸" : "🇺🇸"} ${s.ticker} +${formatAmount(s.pnl, s.currency)}`;
-  }
-  if (stats.worstOp) {
-    const s = stats.worstOp;
-    document.getElementById("stat-worst").textContent =
-      `${s.market === "ES" ? "🇪🇸" : "🇺🇸"} ${s.ticker} ${formatAmount(s.pnl, s.currency)}`;
-  }
+  if (stats.bestOp)  document.getElementById("stat-best").textContent = `${stats.bestOp.ticker} +${formatAmount(stats.bestOp.pnl, stats.bestOp.currency)}`;
+  if (stats.worstOp) document.getElementById("stat-worst").textContent = `${stats.worstOp.ticker} ${formatAmount(stats.worstOp.pnl, stats.worstOp.currency)}`;
 }
 
 function renderHistory() {
   const container = document.getElementById("history-list");
   let filtered = history;
-
   if (historyFilter === "ES")   filtered = history.filter(h => h.market === "ES");
   if (historyFilter === "US")   filtered = history.filter(h => h.market === "US");
   if (historyFilter === "xfer") filtered = history.filter(h => h.type   === "xfer");
 
   if (filtered.length === 0) {
-    container.innerHTML = '<div class="empty-history">Sin operaciones en este filtro</div>';
-    return;
+    container.innerHTML = '<div class="empty-history">Sin operaciones</div>'; return;
   }
 
   container.innerHTML = filtered.map(op => {
-    if (op.type === "xfer") return renderHistoryXfer(op);
-
-    const isBuy    = op.type === "buy";
-    const flagHtml = op.market === "ES" ? "🇪🇸" : "🇺🇸";
-    const cur      = op.market === "ES" ? "EUR" : "USD";
-
-    let pnlHtml = "";
-    if (op.pnl !== null && op.pnl !== undefined) {
-      const cls  = op.pnl > 0 ? "pos" : op.pnl < 0 ? "neg" : "neu";
-      const sign = op.pnl >= 0 ? "+" : "";
-      pnlHtml = `<div class="history-pnl ${cls}">${sign}${formatAmount(op.pnl, cur)}</div>`;
-    } else {
-      pnlHtml = `<div class="history-pnl neu">—</div>`;
+    if (op.type === "xfer") {
+      const isEsToUs = op.dir === "ES_TO_US";
+      return `<div class="history-item xfer"><span class="history-badge xfer">TRASP.</span><div class="history-detail"><span class="history-market">${isEsToUs ? "🇪🇸→🇺🇸" : "🇺🇸→🇪🇸"}</span><div class="history-info">${formatAmount(op.amountFrom, isEsToUs?"EUR":"USD")} → ${formatAmount(op.amountTo, isEsToUs?"USD":"EUR")}</div><div class="history-date">${op.date}</div></div><div class="history-pnl neu">⇄</div></div>`;
     }
+    const isBuy = op.type === "buy";
+    const cur = op.market === "ES" ? "EUR" : "USD";
+    let pnlHtml = op.pnl !== null ? `<div class="history-pnl ${op.pnl>0?"pos":op.pnl<0?"neg":"neu"}">${op.pnl>=0?"+":""}${formatAmount(op.pnl, cur)}</div>` : `<div class="history-pnl neu">—</div>`;
 
-    return `<div class="history-item ${op.type}">
-      <span class="history-badge ${op.type}">${isBuy ? "COMPRA" : "VENTA"}</span>
-      <div class="history-detail">
-        <span class="history-market">${flagHtml}</span>
-        <span class="history-ticker"> ${op.ticker}</span>
-        <div class="history-info">${op.qty} acc. × ${formatAmount(op.price, cur)} = ${formatAmount(op.total, cur)}</div>
-        <div class="history-date">${op.date}</div>
-      </div>
-      ${pnlHtml}
-    </div>`;
+    return `<div class="history-item ${op.type}"><span class="history-badge ${op.type}">${isBuy ? "COMPRA" : "VENTA"}</span><div class="history-detail"><span class="history-ticker">${op.ticker}</span><div class="history-info">${op.qty}x ${formatAmount(op.price, cur)}</div><div class="history-date">${op.date}</div></div>${pnlHtml}</div>`;
   }).join("");
-}
-
-function renderHistoryXfer(op) {
-  const fromCur = op.dir === "ES_TO_US" ? "EUR" : "USD";
-  const toCur   = op.dir === "ES_TO_US" ? "USD" : "EUR";
-  const fromFlag = op.dir === "ES_TO_US" ? "🇪🇸" : "🇺🇸";
-  const toFlag   = op.dir === "ES_TO_US" ? "🇺🇸" : "🇪🇸";
-
-  return `<div class="history-item xfer">
-    <span class="history-badge xfer">TRASPASO</span>
-    <div class="history-detail">
-      <span class="history-market">${fromFlag} → ${toFlag}</span>
-      <div class="history-info">
-        ${formatAmount(op.amountFrom, fromCur)} → ${formatAmount(op.amountTo, toCur)}
-        (TC: ${op.rate.toFixed(4)})
-      </div>
-      <div class="history-date">${op.date}</div>
-    </div>
-    <div class="history-pnl neu">⇄</div>
-  </div>`;
 }
 
 function filterHistory(filter) {
   historyFilter = filter;
-  // Actualizar botones de filtro
-  ["all","es","us","xfer"].forEach(id => {
-    document.getElementById(`hf-${id}`).classList.toggle("active", id === filter);
-  });
+  ["all","es","us","xfer"].forEach(id => document.getElementById(`hf-${id}`).classList.toggle("active", id === filter));
   renderHistory();
 }
 
 function updateXpBar() {
-  const ops   = history.filter(h => h.type !== "xfer").length;
-  const level = Math.floor(ops / 5) + 1;
-  const xp    = ((ops % 5) / 5) * 100;
-  document.getElementById("xp-bar").style.width = xp + "%";
-  document.getElementById("xp-label").textContent = `NIVEL ${level}`;
+  const ops = history.filter(h => h.type !== "xfer").length;
+  document.getElementById("xp-bar").style.width = (((ops % 5) / 5) * 100) + "%";
+  document.getElementById("xp-label").textContent = `NIVEL ${Math.floor(ops / 5) + 1}`;
 }
 
 // ─────────────────────────────────────────────────────────────
-// MODAL: TRANSFERENCIA DE FONDOS
+// TRANSFERENCIA DE FONDOS
 // ─────────────────────────────────────────────────────────────
 
 async function openTransferModal() {
   document.getElementById("modal-transfer").classList.remove("hidden");
   document.getElementById("transfer-amount").value = "";
   document.getElementById("transfer-msg").textContent = "";
-  resetTransferPreview();
+  document.getElementById("tp-from-val").textContent = "—"; document.getElementById("tp-to-val").textContent = "—";
   updateTransferBalances();
-  await loadExchangeRate();
+  await loadExchangeRate(false);
 }
 
-function closeTransferModal() {
-  document.getElementById("modal-transfer").classList.add("hidden");
-}
+function closeTransferModal() { document.getElementById("modal-transfer").classList.add("hidden"); }
 
-/** Carga el tipo de cambio EUR/USD desde Frankfurter API */
-async function loadExchangeRate() {
+async function loadExchangeRate(silent = false) {
   const el = document.getElementById("er-value");
-  el.textContent = "Cargando…";
-
+  if(el) el.textContent = "Cargando…";
   try {
-    // Frankfurter es una API pública y gratuita, sin proxy necesario
     const res  = await fetch(EXCHANGE_API);
     const data = await res.json();
     exchangeRate = data.rates.USD;
-    el.textContent = `1 EUR = ${exchangeRate.toFixed(4)} USD`;
-    updateTransferPreview();
+    if(el) el.textContent = `1 EUR = ${exchangeRate.toFixed(4)} USD`;
+    if(!silent) updateTransferPreview();
+    updateGlobalNetWorth(); 
   } catch (err) {
-    // Fallback: tipo de cambio aproximado
     exchangeRate = 1.08;
-    el.textContent = `~1 EUR = ${exchangeRate.toFixed(4)} USD (estimado)`;
-    showToast("TC en modo estimado (sin conexión)", "info");
+    if(el) el.textContent = `~1 EUR = ${exchangeRate.toFixed(4)} USD (est.)`;
+    if(!silent) showToast("TC en modo estimado", "info");
+    updateGlobalNetWorth();
   }
 }
 
@@ -777,240 +746,87 @@ function setTransferDir(dir) {
   transferDir = dir;
   document.getElementById("dir-es-us").classList.toggle("active", dir === "ES_TO_US");
   document.getElementById("dir-us-es").classList.toggle("active", dir === "US_TO_ES");
-
-  // Actualizar etiquetas del formulario
   const isEsToUs = dir === "ES_TO_US";
-  document.getElementById("transfer-label").textContent =
-    isEsToUs ? "IMPORTE EN EUR A ENVIAR" : "IMPORTE EN USD A ENVIAR";
-  document.getElementById("transfer-amount").placeholder = isEsToUs ? "0.00 EUR" : "0.00 USD";
-
-  document.getElementById("tp-from-lbl").textContent = isEsToUs ? "Envías desde 🇪🇸 (EUR)" : "Envías desde 🇺🇸 (USD)";
-  document.getElementById("tp-to-lbl").textContent   = isEsToUs ? "Recibes en 🇺🇸 (USD)"   : "Recibes en 🇪🇸 (EUR)";
-
+  document.getElementById("transfer-label").textContent = isEsToUs ? "IMPORTE EN EUR A ENVIAR" : "IMPORTE EN USD A ENVIAR";
+  document.getElementById("tp-from-lbl").textContent = isEsToUs ? "Envías desde 🇪🇸" : "Envías desde 🇺🇸";
+  document.getElementById("tp-to-lbl").textContent   = isEsToUs ? "Recibes en 🇺🇸"   : "Recibes en 🇪🇸";
   updateTransferPreview();
-  updateTransferBalances();
 }
 
 function updateTransferPreview() {
   if (!exchangeRate) return;
-
   const amount = parseFloat(document.getElementById("transfer-amount").value) || 0;
   const isEsToUs = transferDir === "ES_TO_US";
-
-  const fromCur = isEsToUs ? "EUR" : "USD";
-  const toCur   = isEsToUs ? "USD" : "EUR";
-
-  // Conversión
-  let converted;
-  if (isEsToUs) {
-    converted = amount * exchangeRate;            // EUR → USD
-  } else {
-    converted = amount / exchangeRate;            // USD → EUR
-  }
-
-  document.getElementById("tp-from-val").textContent = amount > 0 ? formatAmount(amount, fromCur) : "—";
-  document.getElementById("tp-to-val").textContent   = amount > 0 ? formatAmount(converted, toCur) : "—";
+  const converted = isEsToUs ? amount * exchangeRate : amount / exchangeRate;
+  document.getElementById("tp-from-val").textContent = amount > 0 ? formatAmount(amount, isEsToUs?"EUR":"USD") : "—";
+  document.getElementById("tp-to-val").textContent   = amount > 0 ? formatAmount(converted, isEsToUs?"USD":"EUR") : "—";
 }
 
 function updateTransferBalances() {
-  const container = document.getElementById("transfer-balances");
-  container.innerHTML = `
-    <div class="tb-item">
-      <span>🇪🇸 Disponible EUR</span>
-      <span class="tb-val" style="color:var(--es-color)">${formatAmount(balanceEs, "EUR")}</span>
-    </div>
-    <div class="tb-item">
-      <span>🇺🇸 Disponible USD</span>
-      <span class="tb-val" style="color:var(--us-color)">${formatAmount(balanceUs, "USD")}</span>
-    </div>
+  document.getElementById("transfer-balances").innerHTML = `
+    <div class="tb-item"><span>🇪🇸 EUR</span><span class="tb-val" style="color:var(--es-color)">${formatAmount(balanceEs, "EUR")}</span></div>
+    <div class="tb-item"><span>🇺🇸 USD</span><span class="tb-val" style="color:var(--us-color)">${formatAmount(balanceUs, "USD")}</span></div>
   `;
 }
 
-function resetTransferPreview() {
-  document.getElementById("tp-from-val").textContent = "—";
-  document.getElementById("tp-to-val").textContent   = "—";
-}
-
-/** Ejecuta la transferencia de fondos entre carteras */
 function executeTransfer() {
   const amount   = parseFloat(document.getElementById("transfer-amount").value);
   const msgEl    = document.getElementById("transfer-msg");
+  if (!amount || amount <= 0 || !exchangeRate) { msgEl.textContent = "⚠ Revisa importe y conexión"; msgEl.className = "trade-msg error"; return; }
+
   const isEsToUs = transferDir === "ES_TO_US";
-
-  if (!amount || amount <= 0) {
-    msgEl.textContent = "⚠ Introduce un importe válido";
-    msgEl.className   = "trade-msg error";
-    return;
-  }
-
-  if (!exchangeRate) {
-    msgEl.textContent = "⚠ Tipo de cambio no disponible, espera un momento";
-    msgEl.className   = "trade-msg error";
-    return;
-  }
-
   if (isEsToUs) {
-    // Enviamos EUR, recibimos USD
-    if (amount > balanceEs) {
-      msgEl.textContent = `✗ Saldo EUR insuficiente (tienes ${formatAmount(balanceEs,"EUR")})`;
-      msgEl.className   = "trade-msg error";
-      return;
-    }
+    if (amount > balanceEs) { msgEl.textContent = `✗ Saldo insuficiente`; msgEl.className = "trade-msg error"; return; }
     const converted = parseFloat((amount * exchangeRate).toFixed(2));
-    balanceEs -= amount;
-    balanceUs  = parseFloat((balanceUs + converted).toFixed(2));
-
+    balanceEs -= amount; balanceUs = parseFloat((balanceUs + converted).toFixed(2));
     addHistoryXfer({ dir: "ES_TO_US", amountFrom: amount, amountTo: converted, rate: exchangeRate });
-    showToast(`⇄ ${formatAmount(amount,"EUR")} → ${formatAmount(converted,"USD")}`, "success");
   } else {
-    // Enviamos USD, recibimos EUR
-    if (amount > balanceUs) {
-      msgEl.textContent = `✗ Saldo USD insuficiente (tienes ${formatAmount(balanceUs,"USD")})`;
-      msgEl.className   = "trade-msg error";
-      return;
-    }
+    if (amount > balanceUs) { msgEl.textContent = `✗ Saldo insuficiente`; msgEl.className = "trade-msg error"; return; }
     const converted = parseFloat((amount / exchangeRate).toFixed(2));
-    balanceUs -= amount;
-    balanceEs  = parseFloat((balanceEs + converted).toFixed(2));
-
+    balanceUs -= amount; balanceEs = parseFloat((balanceEs + converted).toFixed(2));
     addHistoryXfer({ dir: "US_TO_ES", amountFrom: amount, amountTo: converted, rate: exchangeRate });
-    showToast(`⇄ ${formatAmount(amount,"USD")} → ${formatAmount(converted,"EUR")}`, "success");
   }
 
-  saveToStorage();
-  renderAll();
-  updateTransferBalances();
-
-  // Limpiar formulario del modal
+  saveToStorage(); renderAll(); updateTransferBalances(); updateGlobalNetWorth();
   document.getElementById("transfer-amount").value = "";
-  resetTransferPreview();
-  msgEl.textContent = "✔ Transferencia realizada";
-  msgEl.className   = "trade-msg success";
-
-  // Cerrar modal tras 1.2 segundos
+  document.getElementById("tp-from-val").textContent = "—"; document.getElementById("tp-to-val").textContent = "—";
+  msgEl.textContent = "✔ Transferencia realizada"; msgEl.className = "trade-msg success";
   setTimeout(closeTransferModal, 1200);
 }
 
 // ─────────────────────────────────────────────────────────────
-// HISTORIAL: AÑADIR ENTRADAS
+// HELPERS E HISTORIAL
 // ─────────────────────────────────────────────────────────────
+function addHistory(op) { op.date = nowDate(); history.unshift(op); if(history.length>300) history.pop(); }
+function addHistoryXfer(op) { op.type = "xfer"; op.market = "XFER"; op.date = nowDate(); history.unshift(op); if(history.length>300) history.pop(); }
+function nowDate() { return new Date().toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); }
 
-function addHistory(op) {
-  op.date = nowDate();
-  history.unshift(op);
-  if (history.length > 300) history.pop();
-}
-
-function addHistoryXfer({ dir, amountFrom, amountTo, rate }) {
-  history.unshift({
-    type: "xfer",
-    market: "XFER",
-    dir,
-    amountFrom,
-    amountTo,
-    rate,
-    date: nowDate(),
-  });
-  if (history.length > 300) history.pop();
-}
-
-function nowDate() {
-  return new Date().toLocaleString("es-ES", {
-    day: "2-digit", month: "2-digit",
-    hour: "2-digit", minute: "2-digit",
-  });
-}
-
-// ─────────────────────────────────────────────────────────────
-// MODAL: RESET
-// ─────────────────────────────────────────────────────────────
-
-function openResetModal() {
-  document.getElementById("modal-reset").classList.remove("hidden");
-}
-function closeResetModal() {
-  document.getElementById("modal-reset").classList.add("hidden");
-}
+function openResetModal()  { document.getElementById("modal-reset").classList.remove("hidden"); }
+function closeResetModal() { document.getElementById("modal-reset").classList.add("hidden"); }
 function confirmReset() {
   Object.values(LS_KEYS).forEach(k => localStorage.removeItem(k));
-  resetState();
-  saveToStorage();
-  closeResetModal();
-  renderAll();
-  renderTickerChips();
-  populateSellSelect();
-  resetBuyForm();
-  showToast("✔ SIMULACIÓN REINICIADA — Saldo: €5.000", "success");
+  resetState(); saveToStorage(); closeResetModal(); renderAll(); renderTickerChips(); populateSellSelect(); resetBuyForm();
+  showToast("✔ SIMULACIÓN REINICIADA", "success");
 }
-
-// Cerrar modales al hacer clic en el overlay
-document.addEventListener("DOMContentLoaded", () => {
-  ["modal-reset", "modal-transfer"].forEach(id => {
-    document.getElementById(id).addEventListener("click", function(e) {
-      if (e.target === this) {
-        if (id === "modal-reset")    closeResetModal();
-        if (id === "modal-transfer") closeTransferModal();
-      }
-    });
-  });
-
-  // Enter en ticker lanza búsqueda
-  document.getElementById("buy-ticker").addEventListener("keydown", e => {
-    if (e.key === "Enter") fetchBuyPrice();
-  });
-});
-
-// ─────────────────────────────────────────────────────────────
-// HELPERS UI
-// ─────────────────────────────────────────────────────────────
 
 function resetBuyForm() {
-  document.getElementById("buy-ticker").value            = "";
-  document.getElementById("buy-qty").value               = "";
-  document.getElementById("buy-price").textContent       = "—";
-  document.getElementById("buy-price").dataset.price     = "";
-  document.getElementById("buy-badge").textContent       = "";
-  document.getElementById("buy-total-cost").textContent  = "—";
-  document.getElementById("buy-balance-hint").textContent = "";
-  document.getElementById("buy-msg").textContent         = "";
-  document.getElementById("buy-msg").className           = "trade-msg";
+  document.getElementById("buy-ticker").value = ""; document.getElementById("buy-qty").value = "";
+  document.getElementById("buy-price").textContent = "—"; document.getElementById("buy-price").dataset.price = "";
+  document.getElementById("buy-badge").textContent = ""; document.getElementById("buy-total-cost").textContent = "—";
+  document.getElementById("buy-balance-hint").textContent = ""; document.getElementById("buy-msg").textContent = "";
 }
 
-function showTradeMsg(form, msg, type) {
-  const el = document.getElementById(`${form}-msg`);
-  el.textContent = msg;
-  el.className   = `trade-msg ${type}`;
-}
+function showTradeMsg(form, msg, type) { const el = document.getElementById(`${form}-msg`); el.textContent = msg; el.className = `trade-msg ${type}`; }
 
 let toastTimer = null;
 function showToast(msg, type = "info") {
-  const el = document.getElementById("toast");
-  el.textContent = msg;
-  el.className   = `toast ${type} show`;
+  const el = document.getElementById("toast"); el.textContent = msg; el.className = `toast ${type} show`;
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove("show"), 3500);
 }
 
-// ─────────────────────────────────────────────────────────────
-// FORMATEO DE MONEDA
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Formatea un valor como moneda.
- * @param {number} value
- * @param {'EUR'|'USD'} currency
- * @returns {string}
- */
 function formatAmount(value, currency) {
-  if (currency === "USD") {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency", currency: "USD",
-      minimumFractionDigits: 2, maximumFractionDigits: 2,
-    }).format(value);
-  }
-  // Por defecto EUR con formato español
-  return new Intl.NumberFormat("es-ES", {
-    style: "currency", currency: "EUR",
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  return new Intl.NumberFormat(currency === "USD" ? "en-US" : "es-ES", {
+    style: "currency", currency: currency, minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(value);
 }
