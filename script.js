@@ -25,97 +25,6 @@ const CORS_PROXY = "https://corsproxy.io/?";
 const YF_URL     = "https://query1.finance.yahoo.com/v8/finance/chart/";
 const YF_SEARCH  = "https://query1.finance.yahoo.com/v1/finance/search?q=";
 
-// ─────────────────────────────────────────────────────────────
-// CÁLCULO DE COMISIONES Y FISCALIDAD REALISTA
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Simula la ejecución parcial de una orden de compra en varios tramos.
- * Basado en la liquidez real del mercado:
- *  - Órdenes pequeñas (<500€/$): 1 tramo  (90% de los casos)
- *  - Órdenes medianas (500–5000): 1–2 tramos
- *  - Órdenes grandes (>5000):    1–3 tramos
- * La comisión se cobra POR TRAMO (mínimo 3€/$ por tramo, o 0.1% si es mayor).
- * Esto replica el modelo de brokers como DeGiro, ING, BBVA, Sabadell, etc.
- */
-function calcBuyFees(totalCost, market) {
-  const currency = market === "ES" ? "EUR" : "USD";
-  const minFeePerTranche = market === "ES" ? 3.0 : 1.0;   // DeGiro ES: 3€/op; US: $1/op
-  const pctFeePerTranche = 0.001;                           // 0.10% por tramo
-  const fixedFeeBase     = market === "ES" ? 2.0 : 0.50;   // comisión fija adicional bolsa
-
-  // Determinar número de tramos según tamaño de la orden
-  let maxTranches;
-  if (totalCost < 500)        maxTranches = 1;
-  else if (totalCost < 2000)  maxTranches = 2;
-  else if (totalCost < 8000)  maxTranches = 2;
-  else                         maxTranches = 3;
-
-  // Número real de tramos (aleatorio con sesgo hacia 1)
-  const rand = Math.random();
-  let tranches;
-  if (maxTranches === 1) {
-    tranches = 1;
-  } else if (maxTranches === 2) {
-    tranches = rand < 0.65 ? 1 : 2;
-  } else {
-    tranches = rand < 0.50 ? 1 : rand < 0.80 ? 2 : 3;
-  }
-
-  // Comisión por tramo = máx(mínimo, porcentaje) + fija bolsa (solo en ES)
-  const feePerTranche = Math.max(minFeePerTranche, totalCost * pctFeePerTranche);
-  let totalFee = feePerTranche * tranches;
-  if (market === "ES") totalFee += fixedFeeBase; // Canon de bolsa española
-
-  return { tranches, totalFee, feePerTranche, currency };
-}
-
-/**
- * Calcula impuestos y comisiones de venta según fiscalidad española.
- * Impuesto sobre plusvalías (IRPF España, Base del Ahorro 2024):
- *   - Hasta 6.000€ de ganancia:    19%
- *   - De 6.000 a 50.000€:          21%
- *   - Más de 50.000€:               23%
- * Comisión de venta: igual que compra (0.10% mín. 3€).
- * Para mercado US: misma retención (inversor español en el extranjero).
- */
-function calcSellFees(grossReturn, costBasis, market) {
-  const currency = market === "ES" ? "EUR" : "USD";
-  const gain = grossReturn - costBasis;
-
-  // Comisión del bróker (misma lógica que compra)
-  const minFee = market === "ES" ? 3.0 : 1.0;
-  const brokerFee = Math.max(minFee, grossReturn * 0.001) + (market === "ES" ? 2.0 : 0.50);
-
-  // Impuesto sobre plusvalías (solo si hay ganancia)
-  let taxAmount = 0;
-  let taxBreakdown = [];
-  if (gain > 0) {
-    const tramos = [
-      { limit: 6000,  rate: 0.19 },
-      { limit: 44000, rate: 0.21 }, // 6k a 50k
-      { limit: Infinity, rate: 0.23 }
-    ];
-    let remaining = gain;
-    let prevLimit = 0;
-    for (const tramo of tramos) {
-      if (remaining <= 0) break;
-      const chunkSize = Math.min(remaining, tramo.limit - prevLimit);
-      if (chunkSize <= 0) { prevLimit = tramo.limit; continue; }
-      const tax = chunkSize * tramo.rate;
-      taxAmount += tax;
-      taxBreakdown.push({ from: prevLimit, to: prevLimit + chunkSize, rate: tramo.rate, tax });
-      remaining -= chunkSize;
-      prevLimit = tramo.limit;
-    }
-  }
-
-  const totalDeductions = brokerFee + taxAmount;
-  const netReturn = grossReturn - totalDeductions;
-
-  return { brokerFee, taxAmount, taxBreakdown, totalDeductions, netReturn, gain, currency };
-}
-
 // Estado Global
 let state = {
   market: "ES", 
@@ -493,20 +402,11 @@ function updateBuyCost() {
   const total = price * qty;
   const balance = state.market === "ES" ? state.balanceEs : state.balanceUs;
 
-  if (total > 0) {
-    const fees = calcBuyFees(total, state.market);
-    const totalWithFees = total + fees.totalFee;
-    document.getElementById("buy-total-cost").innerHTML =
-      `${formatAmount(totalWithFees, getCurrency())} <span style="font-size:0.75em;color:var(--text-muted);">(+${formatAmount(fees.totalFee, getCurrency())} comis.)</span>`;
-    const hint = document.getElementById("buy-balance-hint");
-    hint.textContent = `SALDO DISPONIBLE: ${formatAmount(balance, getCurrency())}`;
-    hint.style.color = totalWithFees > balance ? "var(--neon-red)" : "var(--text-muted)";
-  } else {
-    document.getElementById("buy-total-cost").textContent = "—";
-    const hint = document.getElementById("buy-balance-hint");
-    hint.textContent = `SALDO DISPONIBLE: ${formatAmount(balance, getCurrency())}`;
-    hint.style.color = "var(--text-muted)";
-  }
+  document.getElementById("buy-total-cost").textContent = total > 0 ? formatAmount(total, getCurrency()) : "—";
+  
+  const hint = document.getElementById("buy-balance-hint");
+  hint.textContent = `SALDO DISPONIBLE: ${formatAmount(balance, getCurrency())}`;
+  hint.style.color = total > balance ? "var(--neon-red)" : "var(--text-muted)";
 }
 
 function executeBuy() {
@@ -517,13 +417,11 @@ function executeBuy() {
   if(!ticker || !price || qty <= 0) { showToast("Datos de compra inválidos", "error"); return; }
   
   const cost = price * qty;
-  const fees = calcBuyFees(cost, state.market);
-  const totalWithFees = cost + fees.totalFee;
   const balanceKey = state.market === "ES" ? "balanceEs" : "balanceUs";
   
-  if(state[balanceKey] < totalWithFees) { showToast("Saldo insuficiente (incluyendo comisiones)", "error"); return; }
+  if(state[balanceKey] < cost) { showToast("Saldo insuficiente", "error"); return; }
   
-  state[balanceKey] -= totalWithFees;
+  state[balanceKey] -= cost;
   
   const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
   const pos = portfolio.find(p => p.ticker === ticker);
@@ -540,7 +438,7 @@ function executeBuy() {
   saveToLS();
   updateUI();
   resetBuyForm();
-  showBuyFeeModal(ticker, qty, price, cost, fees);
+  showToast(`Compradas ${qty} ${ticker}`, "success");
 }
 
 function addHistory(type, ticker, qty, price, market) {
@@ -785,17 +683,12 @@ function updateSellReturn() {
   const pos = portfolio.find(p => p.ticker === ticker);
 
   if(pos && qty > 0) {
-    const grossReturn = price * qty;
-    const costBasis = pos.price * qty;
-    const fees = calcSellFees(grossReturn, costBasis, state.market);
-    
-    document.getElementById("sell-total-return").innerHTML =
-      `${formatAmount(fees.netReturn, getCurrency())} <span style="font-size:0.75em;color:var(--text-muted);">(−${formatAmount(fees.totalDeductions, getCurrency())} tasas)</span>`;
-    
-    const pnlNet = fees.netReturn - costBasis;
+    const returnAmt = price * qty;
+    const pnl = returnAmt - (pos.price * qty);
+    document.getElementById("sell-total-return").textContent = formatAmount(returnAmt, getCurrency());
     const pnlEl = document.getElementById("sell-pnl-est");
-    pnlEl.textContent = formatAmount(pnlNet, getCurrency());
-    pnlEl.className = pnlNet >= 0 ? "green" : "red";
+    pnlEl.textContent = formatAmount(pnl, getCurrency());
+    pnlEl.className = pnl >= 0 ? "green" : "red";
   } else {
     document.getElementById("sell-total-return").textContent = "—";
     document.getElementById("sell-pnl-est").textContent = "—";
@@ -812,17 +705,15 @@ function executeSell() {
 
   if(!pos || qty <= 0 || qty > pos.qty) return showToast("Cantidad inválida", "error");
 
-  const grossReturn = price * qty;
-  const costBasis   = pos.price * qty;
-  const sellFees    = calcSellFees(grossReturn, costBasis, state.market);
-  const pnlAfterFees = grossReturn - costBasis - sellFees.totalDeductions;
+  const returnAmt = price * qty;
+  const pnl = returnAmt - (pos.price * qty);
 
   if(state.market === "ES") {
-    state.balanceEs += sellFees.netReturn;
-    state.stats.plEs += pnlAfterFees;
+    state.balanceEs += returnAmt;
+    state.stats.plEs += pnl;
   } else {
-    state.balanceUs += sellFees.netReturn;
-    state.stats.plUs += pnlAfterFees;
+    state.balanceUs += returnAmt;
+    state.stats.plUs += pnl;
   }
 
   const pnlPct = (price / pos.price) - 1;
@@ -836,7 +727,7 @@ function executeSell() {
   }
 
   addHistory("VENTA", ticker, qty, price, state.market);
-  updateStats("sell", grossReturn, state.market);
+  updateStats("sell", returnAmt, state.market);
   
   saveToLS();
   updateUI();
@@ -845,7 +736,7 @@ function executeSell() {
   document.getElementById("sell-ticker").value = "";
   onSellTickerChange();
 
-  showSellFeeModal(ticker, qty, price, grossReturn, costBasis, sellFees);
+  showToast(`Vendidas ${qty} ${ticker}`, "success");
 }
 
 function renderHistory(filter = 'all') {
@@ -976,116 +867,4 @@ function executeTransfer() {
   updateUI();
   closeTransferModal();
   showToast("Transferencia completada", "success");
-}
-// ─────────────────────────────────────────────────────────────
-// MODALES DE DESGLOSE DE COMISIONES Y FISCALIDAD
-// ─────────────────────────────────────────────────────────────
-
-function showBuyFeeModal(ticker, qty, price, cost, fees) {
-  const curr = fees.currency;
-  const fmt = (v) => formatAmount(v, curr);
-  const trancheWord = fees.tranches === 1 ? "tramo" : "tramos";
-
-  document.getElementById("fee-modal-title").textContent = "✅ COMPRA EJECUTADA";
-  document.getElementById("fee-modal-icon").textContent = "🟢";
-  document.getElementById("fee-modal-body").innerHTML = `
-    <div class="fee-row fee-highlight">
-      <span>${qty} × ${ticker}</span>
-      <span>${fmt(price)} / acción</span>
-    </div>
-    <div class="fee-divider"></div>
-    <div class="fee-row">
-      <span>Valor de la orden</span>
-      <span>${fmt(cost)}</span>
-    </div>
-    <div class="fee-row fee-tranche">
-      <span>⚡ Ejecución en <strong>${fees.tranches} ${trancheWord}</strong></span>
-      <span class="fee-badge-tranche">${fees.tranches === 1 ? 'Orden completa de una vez' : `Dividida en ${fees.tranches} ejecuciones parciales`}</span>
-    </div>
-    <div class="fee-row">
-      <span>Comisión bróker (${fees.tranches} × ${fmt(fees.feePerTranche.toFixed(2))})</span>
-      <span class="red">−${fmt(fees.totalFee)}</span>
-    </div>
-    ${curr === 'EUR' ? `<div class="fee-row fee-small"><span>Incluye canon bolsa española</span><span class="red">−${fmt(2.0)}</span></div>` : ''}
-    <div class="fee-divider"></div>
-    <div class="fee-row fee-total">
-      <span>TOTAL DESEMBOLSADO</span>
-      <span class="red">${fmt(cost + fees.totalFee)}</span>
-    </div>
-    <div class="fee-row fee-pct">
-      <span>Coste efectivo de comisiones</span>
-      <span>${((fees.totalFee / cost) * 100).toFixed(3)}% de la orden</span>
-    </div>
-  `;
-  document.getElementById("modal-fees").classList.remove("hidden");
-}
-
-function showSellFeeModal(ticker, qty, price, grossReturn, costBasis, fees) {
-  const curr = fees.currency;
-  const fmt = (v) => formatAmount(v, curr);
-  const hasGain = fees.gain > 0;
-  const hasLoss = fees.gain < 0;
-
-  let taxHtml = '';
-  if (hasGain && fees.taxBreakdown.length > 0) {
-    taxHtml = fees.taxBreakdown.map(t =>
-      `<div class="fee-row fee-small"><span>  ${(t.rate*100).toFixed(0)}% sobre ${fmt(t.to - t.from)}</span><span class="red">−${fmt(t.tax)}</span></div>`
-    ).join('');
-  }
-
-  const gainLabel = hasGain ? `<span class="green">+${fmt(fees.gain)}</span>` : hasLoss ? `<span class="red">${fmt(fees.gain)}</span>` : `<span>${fmt(0)}</span>`;
-
-  document.getElementById("fee-modal-title").textContent = "💥 VENTA EJECUTADA";
-  document.getElementById("fee-modal-icon").textContent = "🔴";
-  document.getElementById("fee-modal-body").innerHTML = `
-    <div class="fee-row fee-highlight">
-      <span>${qty} × ${ticker}</span>
-      <span>${fmt(price)} / acción</span>
-    </div>
-    <div class="fee-divider"></div>
-    <div class="fee-row">
-      <span>Retorno bruto</span>
-      <span>${fmt(grossReturn)}</span>
-    </div>
-    <div class="fee-row">
-      <span>Coste base (precio medio)</span>
-      <span>${fmt(costBasis)}</span>
-    </div>
-    <div class="fee-row">
-      <span>Plusvalía / Minusvalía</span>
-      <span>${gainLabel}</span>
-    </div>
-    <div class="fee-divider"></div>
-    <div class="fee-row">
-      <span>Comisión bróker</span>
-      <span class="red">−${fmt(fees.brokerFee)}</span>
-    </div>
-    ${curr === 'EUR' ? `<div class="fee-row fee-small"><span>Incluye canon bolsa española</span><span class="red">−${fmt(2.0)}</span></div>` : ''}
-    ${hasGain ? `
-    <div class="fee-row fee-tax-header">
-      <span>🏛️ IRPF — Base del Ahorro (España)</span>
-      <span class="red">−${fmt(fees.taxAmount)}</span>
-    </div>
-    ${taxHtml}
-    ` : hasLoss ? `
-    <div class="fee-row fee-tax-header">
-      <span>🏛️ IRPF — Sin impuesto (minusvalía)</span>
-      <span class="green">€0.00</span>
-    </div>
-    ` : ''}
-    <div class="fee-divider"></div>
-    <div class="fee-row fee-total">
-      <span>TOTAL DEDUCCIONES</span>
-      <span class="red">−${fmt(fees.totalDeductions)}</span>
-    </div>
-    <div class="fee-row fee-total-net">
-      <span>NETO RECIBIDO EN CUENTA</span>
-      <span class="${fees.netReturn >= costBasis ? 'green' : 'red'}">${fmt(fees.netReturn)}</span>
-    </div>
-  `;
-  document.getElementById("modal-fees").classList.remove("hidden");
-}
-
-function closeFeeModal() {
-  document.getElementById("modal-fees").classList.add("hidden");
 }
