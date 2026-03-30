@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pandu Investor — Bolsa España & USA</title>
+  <title>Pandu Investor — Bolsa España &amp; USA</title>
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
 </head>
-<body class="market-es">
+<body>
 
   <header class="main-header">
     <div class="header-inner">
@@ -16,151 +16,311 @@
         <span class="logo-text">PANDU<span class="logo-accent"> INVESTOR</span></span>
       </div>
 
-      <div class="user-profile-header" onclick="openProfileModal()">
-        <div class="uph-avatar" id="hdr-icon">🌱</div>
-        <div class="uph-info">
-          <div class="uph-name" id="hdr-title">Novato del Ahorro</div>
-          <div class="uph-level-text">Nivel <span id="hdr-level-num">1</span></div>
-          <div class="uph-bar-bg">
-            <div class="uph-bar-fill" id="hdr-xp-fill"></div>
-          </div>
-        </div>
-      </div>
-
       <div class="market-switcher">
-        <button class="mkt-btn active" id="mkt-es" onclick="setMarket('ES')">🇪🇸 <span>IBEX</span></button>
-        <button class="mkt-btn" id="mkt-us" onclick="setMarket('US')">🇺🇸 <span>NYSE</span></button>
+        <button class="mkt-btn active" id="mkt-es" onclick="setMarket('ES')">
+          🇪🇸 <span>IBEX</span>
+        </button>
+        <button class="mkt-btn" id="mkt-us" onclick="setMarket('US')">
+          🇺🇸 <span>NYSE</span>
+        </button>
       </div>
 
       <div class="header-stats">
-        <div class="stat-pill es-pill"><span class="stat-label">🇪🇸 SALDO</span><span class="stat-value" id="header-saldo-es">€0.00</span></div>
-        <div class="stat-pill us-pill"><span class="stat-label">🇺🇸 SALDO</span><span class="stat-value" id="header-saldo-us">$0.00</span></div>
-        <div class="stat-pill networth-pill"><span class="stat-label">PATRIMONIO</span><span class="stat-value" id="header-networth">---</span></div>
+        <div class="stat-pill es-pill" id="pill-es">
+          <span class="stat-label">🇪🇸 SALDO EUR</span>
+          <span class="stat-value" id="header-saldo-es">€0.00</span>
+        </div>
+        <div class="stat-pill us-pill" id="pill-us">
+          <span class="stat-label">🇺🇸 SALDO USD</span>
+          <span class="stat-value" id="header-saldo-us">$0.00</span>
+        </div>
+        <div class="stat-pill networth-pill">
+          <span class="stat-label">PATRIMONIO TOTAL</span>
+          <span class="stat-value" id="header-networth">Cargando...</span>
+        </div>
+        <div class="stat-pill gain" id="header-pl-pill">
+          <span class="stat-label">P&amp;L GLOBAL</span>
+          <span class="stat-value" id="header-pl">—</span>
+        </div>
       </div>
 
       <div class="header-actions">
-        <button class="btn-transfer" onclick="openTransferModal()">⇄ TRANSF.</button>
-        <button class="btn-reset" onclick="openResetModal()">⚠ RESET</button>
+        <button class="btn-transfer" id="btn-transfer" onclick="openTransferModal()">⇄ TRANSF.</button>
+        <button class="btn-reset" id="btn-reset" onclick="openResetModal()">⚠ RESET</button>
       </div>
+    </div>
+
+    <div class="xp-bar-wrap">
+      <div class="xp-bar" id="xp-bar"></div>
+      <span class="xp-label" id="xp-label">NIVEL 1</span>
     </div>
   </header>
 
+  <div class="market-banner" id="market-banner">
+    <span id="mb-flag">🇪🇸</span>
+    <div class="mb-info">
+      <span class="mb-name" id="mb-name">MERCADO ESPAÑOL — IBEX 35 &amp; BME</span>
+      <span class="mb-hint" id="mb-hint">IBE.MC · BBVA.MC · SAN.MC · ITX.MC · REP.MC · AMS.MC · TEF.MC · ACX.MC</span>
+    </div>
+  </div>
+
   <main class="main-grid">
-    <section class="panel panel-trade">
-      <div class="panel-header">
-        <h2 id="trade-title">Operar en España</h2>
+
+    <section class="panel panel-trade" id="panel-trade">
+
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-buy"  onclick="switchTab('buy')">🟢 COMPRAR</button>
+        <button class="tab-btn"        id="tab-sell" onclick="switchTab('sell')">🔴 VENDER</button>
       </div>
-      <div class="search-box">
-        <input type="text" id="search-input" placeholder="Buscar Ticker (ej: SAN, TEF, AAPL...)" />
-        <button id="btn-search" onclick="searchStock()">BUSCAR</button>
-      </div>
-      
-      <div id="stock-info" class="stock-info hidden">
-        <div class="stock-main">
-          <span id="stock-symbol" class="symbol">---</span>
-          <span id="stock-price" class="price">0.00</span>
-          <span id="stock-currency" class="curr">EUR</span>
-        </div>
-        <div class="trade-controls">
-          <input type="number" id="trade-qty" value="1" min="1" />
-          <div class="trade-btns">
-            <button class="btn-buy" onclick="executeBuy()">COMPRAR</button>
-            <button class="btn-sell" onclick="executeSell()">VENDER</button>
+
+      <div class="tab-content" id="form-buy">
+
+        <div class="ticker-chips" id="ticker-chips"></div>
+
+        <div class="form-group">
+          <label class="form-label" id="buy-ticker-label">BUSCAR EMPRESA O TICKER</label>
+          <div class="autocomplete-wrapper">
+            <div class="input-row">
+              <input type="text" id="buy-ticker" class="game-input" placeholder="Ej: Apple o AAPL" autocomplete="off" />
+              <button class="btn-lookup" onclick="fetchBuyPrice()" title="Obtener precio actual">🔍</button>
+            </div>
+            <div id="search-suggestions" class="autocomplete-items"></div>
           </div>
         </div>
+
+        <div class="form-group">
+          <label class="form-label">PRECIO ACTUAL</label>
+          <div class="price-display">
+            <span id="buy-price">—</span>
+            <span class="price-badge" id="buy-badge"></span>
+          </div>
+        </div>
+
+        <div class="chart-container" id="inline-chart-container" onclick="openChartModal()">
+          <div class="chart-header">
+            <span id="chart-title">📊 ANÁLISIS TÉCNICO (6 MESES)</span>
+            <span class="chart-hint">Haz clic para ampliar e interactuar 🔍</span>
+          </div>
+          <canvas id="inline-chart"></canvas>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">CANTIDAD (acciones)</label>
+          <input type="number" id="buy-qty" class="game-input" placeholder="0" min="1" step="1"
+            oninput="updateBuyCost()" />
+        </div>
+
+        <div class="cost-preview">
+          <span>COSTE TOTAL</span>
+          <span id="buy-total-cost">—</span>
+        </div>
+        
+        <div class="balance-hint" id="buy-balance-hint"></div>
+        
+        <button class="btn-action btn-buy" onclick="executeBuy()">⚡ COMPRAR AHORA</button>
+        <div class="trade-msg" id="buy-msg"></div>
       </div>
-      <div id="search-msg" class="msg-box"></div>
+
+      <div class="tab-content hidden" id="form-sell">
+        <div class="form-group">
+          <label class="form-label">TICKER EN CARTERA</label>
+          <select id="sell-ticker" class="game-input game-select" onchange="onSellTickerChange()">
+            <option value="">— Selecciona —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">PRECIO ACTUAL</label>
+          <div class="price-display">
+            <span id="sell-price">—</span>
+            <span class="price-badge" id="sell-badge"></span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">CANTIDAD (tienes: <span id="sell-max">0</span>)</label>
+          <input type="number" id="sell-qty" class="game-input" placeholder="0" min="1" step="1"
+            oninput="updateSellReturn()" />
+        </div>
+        <div class="cost-preview">
+          <span>RETORNO ESTIMADO</span>
+          <span id="sell-total-return">—</span>
+        </div>
+        <div class="pnl-preview">
+          <span>G/P ESTIMADA</span>
+          <span id="sell-pnl-est">—</span>
+        </div>
+        <button class="btn-action btn-sell" onclick="executeSell()">💥 VENDER AHORA</button>
+        <div class="trade-msg" id="sell-msg"></div>
+      </div>
+
     </section>
 
     <section class="panel panel-portfolio">
       <div class="panel-header">
-        <h2>Mi Cartera (<span id="portfolio-mkt-label">ES</span>)</h2>
-        <div class="portfolio-val-box">
-          <span id="portfolio-value">€0.00</span>
-          <small>Total: <span id="portfolio-total">€0.00</span></small>
+        <h2 class="panel-title" id="portfolio-panel-title">🎮 CARTERA ESPAÑOLA</h2>
+        <button class="btn-refresh" onclick="refreshPortfolio()">↻ ACTUALIZAR</button>
+      </div>
+
+      <div class="portfolio-summary">
+        <div class="summary-card">
+          <span class="summary-label">VALOR CARTERA</span>
+          <span class="summary-val" id="portfolio-value">—</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">SALDO LIBRE</span>
+          <span class="summary-val" id="portfolio-cash">—</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">TOTAL CARTERA</span>
+          <span class="summary-val" id="portfolio-total">—</span>
         </div>
       </div>
-      <div class="table-container">
-        <table>
+
+      <div class="table-wrap">
+        <table class="game-table">
           <thead>
             <tr>
               <th>TICKER</th>
               <th>CANT.</th>
               <th>P. MEDIO</th>
-              <th>ACTUAL</th>
+              <th>P. ACTUAL</th>
               <th>VALOR</th>
-              <th>P&L</th>
+              <th>G/P</th>
             </tr>
           </thead>
-          <tbody id="portfolio-body"></tbody>
+          <tbody id="portfolio-body">
+            <tr class="empty-row"><td colspan="6">No tienes posiciones abiertas</td></tr>
+          </tbody>
         </table>
+      </div>
+
+      <p class="dual-hint">💡 Cambia de mercado con el selector de la cabecera para ver la otra cartera</p>
+    </section>
+
+    <section class="panel panel-stats">
+      <h2 class="panel-title">📊 ESTADÍSTICAS</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-card-label">TOTAL OPS.</span>
+          <span class="stat-card-val" id="stat-ops">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card-label">COMPRAS</span>
+          <span class="stat-card-val green" id="stat-buys">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card-label">VENTAS</span>
+          <span class="stat-card-val red" id="stat-sells">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card-label">OPS. 🇪🇸</span>
+          <span class="stat-card-val es-color" id="stat-ops-es">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card-label">OPS. 🇺🇸</span>
+          <span class="stat-card-val us-color" id="stat-ops-us">0</span>
+        </div>
+        <div class="stat-card wide">
+          <span class="stat-card-label">G/P REALIZADA 🇪🇸 (EUR)</span>
+          <span class="stat-card-val" id="stat-pl-es">€0.00</span>
+        </div>
+        <div class="stat-card wide">
+          <span class="stat-card-label">G/P REALIZADA 🇺🇸 (USD)</span>
+          <span class="stat-card-val" id="stat-pl-us">$0.00</span>
+        </div>
+        <div class="stat-card wide">
+          <span class="stat-card-label">MEJOR OPERACIÓN</span>
+          <span class="stat-card-val green" id="stat-best">—</span>
+        </div>
+        <div class="stat-card wide">
+          <span class="stat-card-label">PEOR OPERACIÓN</span>
+          <span class="stat-card-val red" id="stat-worst">—</span>
+        </div>
+      </div>
+
+      <h2 class="panel-title" style="margin-top:1.5rem">📜 HISTORIAL</h2>
+
+      <div class="history-filter">
+        <button class="hf-btn active" id="hf-all"  onclick="filterHistory('all')">TODOS</button>
+        <button class="hf-btn"        id="hf-es"   onclick="filterHistory('ES')">🇪🇸 ES</button>
+        <button class="hf-btn"        id="hf-us"   onclick="filterHistory('US')">🇺🇸 US</button>
+        <button class="hf-btn"        id="hf-xfer" onclick="filterHistory('xfer')">⇄ TRASP.</button>
+      </div>
+
+      <div class="history-list" id="history-list">
+        <div class="empty-history">Aún no hay operaciones</div>
       </div>
     </section>
 
-    <section class="panel panel-history">
-      <div class="panel-header">
-        <h2>Historial de Operaciones</h2>
-      </div>
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>FECHA</th>
-              <th>TIPO</th>
-              <th>TICKER</th>
-              <th>CANT.</th>
-              <th>PRECIO</th>
-              <th>TOTAL</th>
-              <th>RESULTADO</th>
-            </tr>
-          </thead>
-          <tbody id="history-body"></tbody>
-        </table>
-      </div>
-    </section>
   </main>
 
-  <div class="modal-overlay hidden" id="modal-profile">
-    <div class="modal-box profile-modal">
-      <button class="btn-close-modal" onclick="closeProfileModal()">✖</button>
-      <div class="profile-header-card">
-        <div class="profile-avatar-big" id="prof-icon">🌱</div>
-        <h2 id="prof-title">Novato del Ahorro</h2>
-        <p class="prof-level-tag">NIVEL <span id="prof-level-num">1</span></p>
+  <div class="modal-overlay hidden" id="modal-chart-fs">
+    <div class="modal-box modal-xl">
+      <div class="modal-header-flex">
+        <h3 class="modal-title" id="fs-chart-title" style="color:var(--neon-cyan); margin:0;">ANÁLISIS TÉCNICO</h3>
+        <button class="btn-close-modal" onclick="closeChartModal()">✖</button>
       </div>
-      <div class="profile-stats-grid">
-        <div class="p-stat"><strong>XP TOTAL</strong><span id="prof-xp">0</span></div>
-        <div class="p-stat"><strong>OP. TOTALES</strong><span id="prof-ops">0</span></div>
-        <div class="p-stat"><strong>RANKING</strong><span id="prof-market">BRONCE</span></div>
-      </div>
-      <div class="xp-progress-container">
-        <div class="xp-text-flex">
-          <span>Experiencia para el siguiente nivel</span>
-          <span id="prof-xp-needed">---</span>
-        </div>
-        <div class="uph-bar-bg" style="height:12px; width:100%;"><div class="uph-bar-fill" id="prof-xp-fill"></div></div>
+      <p class="modal-text" style="text-align:left; font-size:0.8rem; margin-top:5px;">Rueda del ratón o "pellizca" para hacer zoom. Arrastra para navegar por el tiempo.</p>
+      
+      <div class="modal-chart-wrapper">
+        <canvas id="fullscreen-chart"></canvas>
       </div>
     </div>
   </div>
 
   <div class="modal-overlay hidden" id="modal-transfer">
-    <div class="modal-box">
-      <h3>TRANSFERIR FONDOS</h3>
-      <p>Convierte divisas para operar en otros mercados.</p>
-      <div class="transfer-grid">
-        <button onclick="executeTransfer('ES_TO_US')">€ ES → $ US</button>
-        <button onclick="executeTransfer('US_TO_ES')">$ US → € ES</button>
+    <div class="modal-box modal-wide">
+      <div class="modal-icon">⇄</div>
+      <h3 class="modal-title" style="color:var(--neon-cyan)">TRANSFERIR FONDOS</h3>
+      <p class="modal-text">Mueve dinero entre tu cuenta en euros y tu cuenta en dólares.<br/>
+        Se aplica el tipo de cambio EUR/USD actual.</p>
+
+      <div class="exchange-box">
+        <span class="exchange-label">TIPO DE CAMBIO EUR/USD</span>
+        <div class="exchange-val-row">
+          <span class="exchange-val" id="er-value">…</span>
+          <button class="er-refresh" onclick="loadExchangeRate()" title="Actualizar tipo de cambio">↻</button>
+        </div>
       </div>
-      <button class="btn-modal-cancel" onclick="closeTransferModal()">CERRAR</button>
+
+      <div class="transfer-direction">
+        <button class="dir-btn active" id="dir-es-us" onclick="setTransferDir('ES_TO_US')">
+          🇪🇸 EUR → 🇺🇸 USD
+        </button>
+        <button class="dir-btn" id="dir-us-es" onclick="setTransferDir('US_TO_ES')">
+          🇺🇸 USD → 🇪🇸 EUR
+        </button>
+      </div>
+
+      <div class="form-group" style="margin-top:16px">
+        <label class="form-label" id="transfer-label">IMPORTE EN EUR A ENVIAR</label>
+        <input type="number" id="transfer-amount" class="game-input" placeholder="0.00"
+          min="0.01" step="0.01" oninput="updateTransferPreview()" />
+      </div>
+
+      <div class="transfer-preview" id="transfer-preview">
+        <div class="tp-row"><span id="tp-from-lbl">Envías desde 🇪🇸</span><span id="tp-from-val">—</span></div>
+        <div class="tp-arrow">↓</div>
+        <div class="tp-row"><span id="tp-to-lbl">Recibes en 🇺🇸</span><span id="tp-to-val">—</span></div>
+      </div>
+
+      <div class="transfer-balances" id="transfer-balances"></div>
+
+      <div class="modal-buttons" style="margin-top:16px">
+        <button class="btn-modal-cancel" onclick="closeTransferModal()">CANCELAR</button>
+        <button class="btn-modal-confirm btn-cyan" onclick="executeTransfer()">⇄ TRANSFERIR</button>
+      </div>
+      <div class="trade-msg" id="transfer-msg" style="margin-top:8px;text-align:center"></div>
     </div>
   </div>
 
   <div class="modal-overlay hidden" id="modal-reset">
     <div class="modal-box">
-      <h3>¿REINICIAR TODO?</h3>
-      <p>Perderás tu progreso, saldo y nivel.</p>
+      <div class="modal-icon">⚠️</div>
+      <h3 class="modal-title">¿REINICIAR TODO?</h3>
+      <p class="modal-text">Se borrarán <strong>ambas carteras</strong>, saldos, historial y estadísticas.<br/>
+        Comenzarás de nuevo con <strong>€5.000</strong> en el mercado español.</p>
       <div class="modal-buttons">
-        <button class="btn-modal-cancel" onclick="closeResetModal()">CANCELAR</button>
+        <button class="btn-modal-cancel"  onclick="closeResetModal()">CANCELAR</button>
         <button class="btn-modal-confirm" onclick="confirmReset()">SÍ, REINICIAR</button>
       </div>
     </div>
@@ -168,13 +328,21 @@
 
   <div class="modal-overlay hidden" id="modal-fees">
     <div class="modal-box modal-fees-box">
-       <div class="modal-header-flex">
-          <h3 id="fee-modal-title">Detalle de Operación</h3>
-          <button onclick="closeFeeModal()">✖</button>
-       </div>
-       <div id="fee-modal-body"></div>
+      <div class="modal-header-flex">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="fee-modal-icon" style="font-size:1.5rem;"></span>
+          <h3 class="modal-title" id="fee-modal-title" style="margin:0;color:var(--neon-cyan);"></h3>
+        </div>
+        <button class="btn-close-modal" onclick="closeFeeModal()">✖</button>
+      </div>
+      <div id="fee-modal-body" class="fee-modal-body"></div>
+      <div style="text-align:center;margin-top:14px;">
+        <button class="btn-modal-confirm btn-cyan" onclick="closeFeeModal()">ENTENDIDO</button>
+      </div>
     </div>
   </div>
+
+  <div class="toast" id="toast"></div>
 
   <script src="script.js"></script>
 </body>
