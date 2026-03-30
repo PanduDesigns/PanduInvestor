@@ -326,6 +326,22 @@
     </div>
   </div>
 
+  <div class="modal-overlay hidden" id="modal-fees">
+    <div class="modal-box modal-fees-box">
+      <div class="modal-header-flex">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="fee-modal-icon" style="font-size:1.5rem;"></span>
+          <h3 class="modal-title" id="fee-modal-title" style="margin:0;color:var(--neon-cyan);"></h3>
+        </div>
+        <button class="btn-close-modal" onclick="closeFeeModal()">✖</button>
+      </div>
+      <div id="fee-modal-body" class="fee-modal-body"></div>
+      <div style="text-align:center;margin-top:14px;">
+        <button class="btn-modal-confirm btn-cyan" onclick="closeFeeModal()">ENTENDIDO</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script src="script.js"></script>

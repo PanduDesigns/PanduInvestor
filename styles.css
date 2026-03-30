@@ -357,3 +357,100 @@ body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,
 .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 .toast.success { border-color: var(--neon-green); color: var(--neon-green); }
 .toast.error   { border-color: var(--neon-red);   color: var(--neon-red); }
+/* ═══════════════════════════════════════════════════════════
+   MODAL DE DESGLOSE DE COMISIONES Y FISCALIDAD
+   ═══════════════════════════════════════════════════════════ */
+
+.modal-fees-box {
+  max-width: 440px;
+  width: 95%;
+}
+
+.fee-modal-body {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fee-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  padding: 4px 2px;
+}
+
+.fee-row.fee-highlight {
+  background: rgba(0,229,255,0.07);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--neon-cyan);
+  border: 1px solid rgba(0,229,255,0.2);
+}
+
+.fee-row.fee-small {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding-left: 16px;
+}
+
+.fee-row.fee-tranche {
+  background: rgba(255,230,0,0.07);
+  border-radius: 6px;
+  padding: 6px 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-left: 3px solid var(--neon-yellow);
+}
+
+.fee-badge-tranche {
+  font-size: 0.72rem;
+  color: var(--neon-yellow);
+  text-align: right;
+}
+
+.fee-row.fee-tax-header {
+  background: rgba(255,58,92,0.07);
+  border-radius: 6px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--neon-red);
+  font-size: 0.82rem;
+}
+
+.fee-row.fee-total {
+  background: rgba(255,58,92,0.1);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border: 1px solid rgba(255,58,92,0.25);
+  margin-top: 2px;
+}
+
+.fee-row.fee-total-net {
+  background: rgba(0,255,136,0.08);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-weight: 700;
+  font-size: 1rem;
+  border: 1px solid rgba(0,255,136,0.25);
+}
+
+.fee-row.fee-pct {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: right;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.fee-divider {
+  height: 1px;
+  background: rgba(0,229,255,0.12);
+  margin: 4px 0;
+}
