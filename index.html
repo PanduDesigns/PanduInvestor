@@ -16,6 +16,17 @@
         <span class="logo-text">PANDU<span class="logo-accent"> INVESTOR</span></span>
       </div>
 
+      <div class="user-profile-header" onclick="openProfileModal()">
+        <div class="uph-avatar" id="hdr-icon">🌱</div>
+        <div class="uph-info">
+          <div class="uph-name" id="hdr-title">Novato del Ahorro</div>
+          <div class="uph-level-text">Nivel <span id="hdr-level-num">1</span></div>
+          <div class="uph-bar-bg">
+            <div class="uph-bar-fill" id="hdr-xp-fill"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="market-switcher">
         <button class="mkt-btn active" id="mkt-es" onclick="setMarket('ES')">
           🇪🇸 <span>IBEX</span>
@@ -48,11 +59,6 @@
         <button class="btn-transfer" id="btn-transfer" onclick="openTransferModal()">⇄ TRANSF.</button>
         <button class="btn-reset" id="btn-reset" onclick="openResetModal()">⚠ RESET</button>
       </div>
-    </div>
-
-    <div class="xp-bar-wrap">
-      <div class="xp-bar" id="xp-bar"></div>
-      <span class="xp-label" id="xp-label">NIVEL 1</span>
     </div>
   </header>
 
@@ -252,6 +258,35 @@
     </section>
 
   </main>
+
+  <div class="modal-overlay hidden" id="modal-profile">
+    <div class="modal-box modal-profile-box">
+      <div class="modal-header-flex">
+        <h3 class="modal-title" style="color:var(--neon-purple); margin:0;">🎮 TU PERFIL DE INVERSOR</h3>
+        <button class="btn-close-modal" onclick="closeProfileModal()">✖</button>
+      </div>
+      
+      <div class="profile-stats-grid">
+        <div class="prof-stat-card">
+          <span class="prof-stat-label">Nivel Actual</span>
+          <span class="prof-stat-value" id="prof-lvl">1</span>
+        </div>
+        <div class="prof-stat-card" style="grid-column: span 2;">
+          <span class="prof-stat-label">Experiencia (XP)</span>
+          <span class="prof-stat-value" id="prof-xp">0</span>
+          <div class="prof-xp-text" id="prof-xp-next">Faltan 500 XP para el nivel 2</div>
+        </div>
+      </div>
+
+      <h4 class="gamify-section-title">Elige tu Título</h4>
+      <div class="gamify-grid" id="titles-grid">
+        </div>
+
+      <h4 class="gamify-section-title">Elige tu Avatar</h4>
+      <div class="gamify-grid" id="icons-grid">
+        </div>
+    </div>
+  </div>
 
   <div class="modal-overlay hidden" id="modal-chart-fs">
     <div class="modal-box modal-xl">
