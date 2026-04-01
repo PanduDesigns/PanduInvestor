@@ -26,6 +26,11 @@
       </div>
 
       <div class="header-stats">
+        <div class="stat-pill coin-pill" id="pill-coins">
+          <span class="stat-label">🪙 PANDUCOINS</span>
+          <span class="stat-value" id="header-coins">0</span>
+        </div>
+
         <div class="stat-pill es-pill" id="pill-es">
           <span class="stat-label">🇪🇸 SALDO EUR</span>
           <span class="stat-value" id="header-saldo-es">€0.00</span>
@@ -44,13 +49,13 @@
         </div>
       </div>
 
-      <!-- BADGE DE JUGADOR -->
       <button class="header-player-badge" id="header-player-badge" onclick="openRewardsModal()" title="Ver recompensas y títulos">
         <span class="badge-icon">🌱</span>
         <span class="badge-title">Novato Bursátil</span>
       </button>
 
       <div class="header-actions">
+        <button class="btn-avatar" onclick="openAvatarModal()">👾 AVATAR</button>
         <button class="btn-transfer" id="btn-transfer" onclick="openTransferModal()">⇄ TRANSF.</button>
         <button class="btn-reset" id="btn-reset" onclick="openResetModal()">⚠ RESET</button>
       </div>
@@ -259,7 +264,94 @@
 
   </main>
 
-  <!-- ═══════ MODAL GRÁFICA FS ═══════ -->
+  <div class="modal-overlay hidden" id="modal-avatar">
+    <div class="modal-box modal-wide">
+      <div class="modal-header-flex">
+        <h3 class="modal-title" style="color:var(--neon-purple);margin:0;">👾 AVATAR &amp; TIENDA</h3>
+        <button class="btn-close-modal" onclick="closeAvatarModal()">✖</button>
+      </div>
+      
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-btn-avatar" onclick="switchAvatarTab('avatar')">👤 MI AVATAR</button>
+        <button class="tab-btn" id="tab-btn-shop" onclick="switchAvatarTab('shop')">🛒 TIENDA</button>
+      </div>
+
+      <div id="view-avatar">
+        <div class="avatar-showcase">
+          <div class="px-character" id="px-character">
+            <div class="px-hair" id="px-hair"></div>
+            <div class="px-head" id="px-head">
+              <div class="px-eye left" id="px-eye-l"></div>
+              <div class="px-eye right" id="px-eye-r"></div>
+              <div class="px-acc" id="px-acc"></div>
+            </div>
+            <div class="px-body" id="px-body"></div>
+            <div class="px-pet" id="px-pet"></div>
+          </div>
+        </div>
+
+        <div class="avatar-controls">
+          <div class="av-control-group">
+            <label>Género</label>
+            <select class="game-input game-select" id="av-gender" onchange="updateAvatarBase()">
+              <option value="male">Masculino</option>
+              <option value="female">Femenino</option>
+            </select>
+          </div>
+          <div class="av-control-group">
+            <label>Tono de piel</label>
+            <div class="color-picker" id="picker-skin"></div>
+          </div>
+          <div class="av-control-group">
+            <label>Color de ojos</label>
+            <div class="color-picker" id="picker-eyes"></div>
+          </div>
+          <div class="av-control-group">
+            <label>Pelo</label>
+            <select class="game-input game-select" id="av-hair-style" onchange="updateAvatarBase()">
+              <option value="short">Corto</option>
+              <option value="long">Largo</option>
+              <option value="spiky">Pinchos</option>
+              <option value="none">Calvo</option>
+            </select>
+          </div>
+          <div class="av-control-group">
+            <label>Color de pelo</label>
+            <div class="color-picker" id="picker-hair"></div>
+          </div>
+          
+          <hr class="fee-divider" style="margin: 15px 0;">
+          <h4 style="font-family: var(--font-arcade); font-size:0.35rem; color:var(--neon-cyan); margin-bottom: 10px;">INVENTARIO (Equipar)</h4>
+          
+          <div class="av-control-group">
+            <label>Ropa</label>
+            <select class="game-input game-select" id="inv-clothes" onchange="equipItem('clothes')"></select>
+          </div>
+          <div class="av-control-group">
+            <label>Accesorio</label>
+            <select class="game-input game-select" id="inv-accessories" onchange="equipItem('accessories')"></select>
+          </div>
+          <div class="av-control-group">
+            <label>Mascota</label>
+            <select class="game-input game-select" id="inv-pets" onchange="equipItem('pets')"></select>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-shop" class="hidden">
+        <div class="shop-header">
+          <span style="font-family: var(--font-arcade); font-size: 0.35rem; color: var(--text-muted);">SALDO DISPONIBLE:</span>
+          <span style="font-family: var(--font-mono); font-size: 1.2rem; color: #ffcc00;" id="shop-coins-display">0 🪙</span>
+        </div>
+        <p class="modal-text" style="font-size: 0.8rem; margin-top: 5px;">Ganas 1 🪙 por cada 1€ de beneficio neto en tus ventas.</p>
+        
+        <div class="shop-categories" id="shop-list">
+          </div>
+      </div>
+
+    </div>
+  </div>
+
   <div class="modal-overlay hidden" id="modal-chart-fs">
     <div class="modal-box modal-xl">
       <div class="modal-header-flex">
@@ -273,7 +365,6 @@
     </div>
   </div>
 
-  <!-- ═══════ MODAL TRANSFER ═══════ -->
   <div class="modal-overlay hidden" id="modal-transfer">
     <div class="modal-box modal-wide">
       <div class="modal-icon">⇄</div>
@@ -320,12 +411,11 @@
     </div>
   </div>
 
-  <!-- ═══════ MODAL RESET ═══════ -->
   <div class="modal-overlay hidden" id="modal-reset">
     <div class="modal-box">
       <div class="modal-icon">⚠️</div>
       <h3 class="modal-title">¿REINICIAR TODO?</h3>
-      <p class="modal-text">Se borrarán <strong>ambas carteras</strong>, saldos, historial, estadísticas y <strong>todo el progreso XP</strong>.<br/>
+      <p class="modal-text">Se borrarán <strong>ambas carteras</strong>, saldos, historial, estadísticas y <strong>todo el progreso XP y Panducoins</strong>.<br/>
         Comenzarás de nuevo con <strong>€5.000</strong> en el mercado español.</p>
       <div class="modal-buttons">
         <button class="btn-modal-cancel"  onclick="closeResetModal()">CANCELAR</button>
@@ -334,7 +424,6 @@
     </div>
   </div>
 
-  <!-- ═══════ MODAL COMISIONES ═══════ -->
   <div class="modal-overlay hidden" id="modal-fees">
     <div class="modal-box modal-fees-box">
       <div class="modal-header-flex">
@@ -351,7 +440,6 @@
     </div>
   </div>
 
-  <!-- ═══════ MODAL LEVEL UP ═══════ -->
   <div class="modal-overlay hidden" id="modal-levelup">
     <div id="confetti-container" class="confetti-container"></div>
     <div class="modal-box modal-levelup-box">
@@ -378,7 +466,6 @@
     </div>
   </div>
 
-  <!-- ═══════ MODAL RECOMPENSAS / PERFIL ═══════ -->
   <div class="modal-overlay hidden" id="modal-rewards">
     <div class="modal-box modal-rewards-box">
       <div class="modal-header-flex">
@@ -386,7 +473,6 @@
         <button class="btn-close-modal" onclick="closeRewardsModal()">✖</button>
       </div>
 
-      <!-- Perfil resumen -->
       <div class="rw-profile">
         <div class="rw-avatar">
           <span id="rw-active-icon" style="font-size:2.5rem;">🌱</span>
@@ -403,7 +489,6 @@
       <p class="rw-section-title">🎖️ TÍTULOS DESBLOQUEABLES</p>
 
       <div class="rewards-levels-list" id="rewards-levels-list">
-        <!-- Renderizado por JS -->
       </div>
 
       <div style="text-align:center;margin-top:16px;">
