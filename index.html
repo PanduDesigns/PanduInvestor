@@ -35,7 +35,7 @@
           <span class="stat-value" id="header-saldo-us">$0.00</span>
         </div>
         <div class="stat-pill networth-pill">
-          <span class="stat-label">PATRIMONIO TOTAL</span>
+          <span class="stat-label">PATRIMONIO</span>
           <span class="stat-value" id="header-networth">Cargando...</span>
         </div>
         <div class="stat-pill gain" id="header-pl-pill">
@@ -43,6 +43,12 @@
           <span class="stat-value" id="header-pl">—</span>
         </div>
       </div>
+
+      <!-- BADGE DE JUGADOR -->
+      <button class="header-player-badge" id="header-player-badge" onclick="openRewardsModal()" title="Ver recompensas y títulos">
+        <span class="badge-icon">🌱</span>
+        <span class="badge-title">Novato Bursátil</span>
+      </button>
 
       <div class="header-actions">
         <button class="btn-transfer" id="btn-transfer" onclick="openTransferModal()">⇄ TRANSF.</button>
@@ -253,6 +259,7 @@
 
   </main>
 
+  <!-- ═══════ MODAL GRÁFICA FS ═══════ -->
   <div class="modal-overlay hidden" id="modal-chart-fs">
     <div class="modal-box modal-xl">
       <div class="modal-header-flex">
@@ -260,13 +267,13 @@
         <button class="btn-close-modal" onclick="closeChartModal()">✖</button>
       </div>
       <p class="modal-text" style="text-align:left; font-size:0.8rem; margin-top:5px;">Rueda del ratón o "pellizca" para hacer zoom. Arrastra para navegar por el tiempo.</p>
-      
       <div class="modal-chart-wrapper">
         <canvas id="fullscreen-chart"></canvas>
       </div>
     </div>
   </div>
 
+  <!-- ═══════ MODAL TRANSFER ═══════ -->
   <div class="modal-overlay hidden" id="modal-transfer">
     <div class="modal-box modal-wide">
       <div class="modal-icon">⇄</div>
@@ -313,11 +320,12 @@
     </div>
   </div>
 
+  <!-- ═══════ MODAL RESET ═══════ -->
   <div class="modal-overlay hidden" id="modal-reset">
     <div class="modal-box">
       <div class="modal-icon">⚠️</div>
       <h3 class="modal-title">¿REINICIAR TODO?</h3>
-      <p class="modal-text">Se borrarán <strong>ambas carteras</strong>, saldos, historial y estadísticas.<br/>
+      <p class="modal-text">Se borrarán <strong>ambas carteras</strong>, saldos, historial, estadísticas y <strong>todo el progreso XP</strong>.<br/>
         Comenzarás de nuevo con <strong>€5.000</strong> en el mercado español.</p>
       <div class="modal-buttons">
         <button class="btn-modal-cancel"  onclick="closeResetModal()">CANCELAR</button>
@@ -326,6 +334,7 @@
     </div>
   </div>
 
+  <!-- ═══════ MODAL COMISIONES ═══════ -->
   <div class="modal-overlay hidden" id="modal-fees">
     <div class="modal-box modal-fees-box">
       <div class="modal-header-flex">
@@ -338,6 +347,67 @@
       <div id="fee-modal-body" class="fee-modal-body"></div>
       <div style="text-align:center;margin-top:14px;">
         <button class="btn-modal-confirm btn-cyan" onclick="closeFeeModal()">ENTENDIDO</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL LEVEL UP ═══════ -->
+  <div class="modal-overlay hidden" id="modal-levelup">
+    <div id="confetti-container" class="confetti-container"></div>
+    <div class="modal-box modal-levelup-box">
+      <div class="lu-rays"></div>
+      <div class="lu-badge-wrap">
+        <div class="lu-level-ring">
+          <span class="lu-level-num" id="lu-level-num">2</span>
+        </div>
+        <div class="lu-icon-big" id="lu-icon">🌱</div>
+      </div>
+      <div class="lu-content">
+        <p class="lu-label">¡SUBISTE DE NIVEL!</p>
+        <h2 class="lu-title" id="lu-title">Aprendiz</h2>
+        <p class="lu-desc" id="lu-desc">Ya sabes abrir una orden. ¡Eso es algo!</p>
+        <div class="lu-xp-row">
+          <span class="lu-xp-label">XP TOTAL</span>
+          <span class="lu-xp-val" id="lu-xp-total">100 XP</span>
+        </div>
+        <div class="lu-reward-line">🎖️ Nuevo título desbloqueado</div>
+        <button class="btn-lu-close" onclick="closeLevelUpModal()">
+          ⚡ ¡INCREÍBLE!
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL RECOMPENSAS / PERFIL ═══════ -->
+  <div class="modal-overlay hidden" id="modal-rewards">
+    <div class="modal-box modal-rewards-box">
+      <div class="modal-header-flex">
+        <h3 class="modal-title" style="color:var(--neon-cyan);margin:0;">🏆 PERFIL &amp; RECOMPENSAS</h3>
+        <button class="btn-close-modal" onclick="closeRewardsModal()">✖</button>
+      </div>
+
+      <!-- Perfil resumen -->
+      <div class="rw-profile">
+        <div class="rw-avatar">
+          <span id="rw-active-icon" style="font-size:2.5rem;">🌱</span>
+        </div>
+        <div class="rw-profile-info">
+          <span class="rw-active-title-label">TÍTULO ACTIVO</span>
+          <span class="rw-active-title-val" id="rw-active-title">Novato Bursátil</span>
+          <span class="rw-level-val" id="rw-level">NIVEL 1</span>
+          <span class="rw-xp-val" id="rw-xp">0 XP</span>
+          <span class="rw-next-xp" id="rw-next-xp">Próximo nivel: 100 XP</span>
+        </div>
+      </div>
+
+      <p class="rw-section-title">🎖️ TÍTULOS DESBLOQUEABLES</p>
+
+      <div class="rewards-levels-list" id="rewards-levels-list">
+        <!-- Renderizado por JS -->
+      </div>
+
+      <div style="text-align:center;margin-top:16px;">
+        <button class="btn-modal-confirm btn-cyan" onclick="closeRewardsModal()">CERRAR</button>
       </div>
     </div>
   </div>

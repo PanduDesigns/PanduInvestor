@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   PANDU INVESTOR — script.js
+   PANDU INVESTOR — script.js  (Gamificación XP v2)
    ═══════════════════════════════════════════════════════════════ */
 
 "use strict";
@@ -8,8 +8,8 @@
 // CONSTANTES Y CONFIGURACIÓN
 // ─────────────────────────────────────────────────────────────
 
-const INITIAL_BALANCE_ES = 5000; 
-const INITIAL_BALANCE_US = 0;    
+const INITIAL_BALANCE_ES = 5000;
+const INITIAL_BALANCE_US = 0;
 
 const LS_KEYS = {
   balanceEs:   "sq_balance_es",
@@ -19,6 +19,9 @@ const LS_KEYS = {
   history:     "sq_history_v2",
   stats:       "sq_stats_v2",
   market:      "sq_market",
+  xp:          "sq_xp_v2",
+  activeTitle: "sq_active_title",
+  unlockedTitles: "sq_unlocked_titles",
 };
 
 const CORS_PROXY = "https://corsproxy.io/?";
@@ -26,32 +29,89 @@ const YF_URL     = "https://query1.finance.yahoo.com/v8/finance/chart/";
 const YF_SEARCH  = "https://query1.finance.yahoo.com/v1/finance/search?q=";
 
 // ─────────────────────────────────────────────────────────────
+// SISTEMA DE NIVELES Y RECOMPENSAS
+// ─────────────────────────────────────────────────────────────
+
+const LEVELS = [
+  { level: 1,  xpRequired: 0,    title: "Novato Bursátil",  icon: "🌱", color: "#5a7a9a",  desc: "Bienvenido al mercado. ¡Todo empieza aquí!" },
+  { level: 2,  xpRequired: 100,  title: "Aprendiz",         icon: "📚", color: "#4a9a7a",  desc: "Ya sabes abrir una orden. ¡Eso es algo!" },
+  { level: 3,  xpRequired: 250,  title: "Trader Junior",    icon: "💼", color: "#3a8fff",  desc: "Empiezas a entender el mercado." },
+  { level: 4,  xpRequired: 500,  title: "Analista",         icon: "🔍", color: "#00e5ff",  desc: "Lees gráficas como un pro." },
+  { level: 5,  xpRequired: 900,  title: "Crypto Bro",       icon: "🚀", color: "#b44aff",  desc: "HODL, Buy the dip, To the moon! 🌙" },
+  { level: 6,  xpRequired: 1500, title: "Day Trader",       icon: "⚡", color: "#ffe600",  desc: "Compra y vende en el mismo día como si nada." },
+  { level: 7,  xpRequired: 2500, title: "Lobo de Wall St.", icon: "🐺", color: "#ff7a00",  desc: "Gordon Gekko tiene competencia." },
+  { level: 8,  xpRequired: 4000, title: "Tiburón Bursátil", icon: "🦈", color: "#00ff88",  desc: "El mercado te teme a ti." },
+  { level: 9,  xpRequired: 6000, title: "Magnate",          icon: "💎", color: "#ff3a5c",  desc: "Tu cartera hace sombra a muchos fondos." },
+  { level: 10, xpRequired: 9000, title: "Warren Pandufett", icon: "🏆", color: "#ffe600",  desc: "Omaha te llama. La cima del análisis." },
+  { level: 11, xpRequired: 13000, title: "Leyenda",         icon: "👑", color: "#ffffff",  desc: "Tu nombre se murmura en los parqués del mundo." },
+  { level: 12, xpRequired: 18000, title: "El Oráculo",      icon: "🔮", color: "#b44aff",  desc: "Predices el mercado antes de que ocurra." },
+  { level: 13, xpRequired: 25000, title: "Dios del Ibex",   icon: "🌟", color: "#ffcc00",  desc: "IBEX 35 es tu patio de recreo." },
+  { level: 14, xpRequired: 35000, title: "S&P Mythic",      icon: "🦅", color: "#3a8fff",  desc: "500 empresas, todas tuyas." },
+  { level: 15, xpRequired: 50000, title: "El Definitivo",   icon: "💫", color: "#00e5ff",  desc: "No hay nivel más alto. Eres la bolsa." },
+];
+
+function getLevelData(xp) {
+  let current = LEVELS[0];
+  let next = LEVELS[1];
+  for (let i = LEVELS.length - 1; i >= 0; i--) {
+    if (xp >= LEVELS[i].xpRequired) {
+      current = LEVELS[i];
+      next = LEVELS[i + 1] || null;
+      break;
+    }
+  }
+  const xpInLevel = xp - current.xpRequired;
+  const xpToNext = next ? next.xpRequired - current.xpRequired : 1;
+  const pct = next ? Math.min(100, (xpInLevel / xpToNext) * 100) : 100;
+  return { current, next, xpInLevel, xpToNext, pct };
+}
+
+function getUnlockedLevels(xp) {
+  return LEVELS.filter(l => xp >= l.xpRequired);
+}
+
+// XP ganada por acciones
+function calcXP(action, params) {
+  switch(action) {
+    case 'buy': {
+      // 5 XP base + 1 XP por cada 100€/$ invertidos
+      const base = 5;
+      const bonus = Math.floor((params.cost || 0) / 100);
+      return base + Math.min(bonus, 50); // máx 55 XP por compra
+    }
+    case 'sell_profit': {
+      // Ganancia: 10 XP base + 3 XP por cada 10€/$ de beneficio neto
+      if (params.netGain <= 0) return 5; // venta con pérdida = 5 XP (experiencia igualmente)
+      const base = 10;
+      const profitBonus = Math.floor(params.netGain / 10) * 3;
+      const pctBonus = params.pct > 0.1 ? 20 : (params.pct > 0.05 ? 10 : 0); // +20 si >10%, +10 si >5%
+      return base + Math.min(profitBonus, 200) + pctBonus;
+    }
+    case 'transfer': return 3;
+    case 'daily_login': return 10;
+    case 'first_buy_es': return 25;
+    case 'first_buy_us': return 25;
+    case 'diversification': return 15; // tener 3+ posiciones distintas
+    default: return 0;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // CÁLCULO DE COMISIONES Y FISCALIDAD REALISTA
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Simula la ejecución parcial de una orden de compra en varios tramos.
- * Basado en la liquidez real del mercado:
- *  - Órdenes pequeñas (<500€/$): 1 tramo  (90% de los casos)
- *  - Órdenes medianas (500–5000): 1–2 tramos
- *  - Órdenes grandes (>5000):    1–3 tramos
- * La comisión se cobra POR TRAMO (mínimo 3€/$ por tramo, o 0.1% si es mayor).
- * Esto replica el modelo de brokers como DeGiro, ING, BBVA, Sabadell, etc.
- */
 function calcBuyFees(totalCost, market) {
   const currency = market === "ES" ? "EUR" : "USD";
-  const minFeePerTranche = market === "ES" ? 3.0 : 1.0;   // DeGiro ES: 3€/op; US: $1/op
-  const pctFeePerTranche = 0.001;                           // 0.10% por tramo
-  const fixedFeeBase     = market === "ES" ? 2.0 : 0.50;   // comisión fija adicional bolsa
+  const minFeePerTranche = market === "ES" ? 3.0 : 1.0;
+  const pctFeePerTranche = 0.001;
+  const fixedFeeBase     = market === "ES" ? 2.0 : 0.50;
 
-  // Determinar número de tramos según tamaño de la orden
   let maxTranches;
   if (totalCost < 500)        maxTranches = 1;
   else if (totalCost < 2000)  maxTranches = 2;
   else if (totalCost < 8000)  maxTranches = 2;
   else                         maxTranches = 3;
 
-  // Número real de tramos (aleatorio con sesgo hacia 1)
   const rand = Math.random();
   let tranches;
   if (maxTranches === 1) {
@@ -62,38 +122,26 @@ function calcBuyFees(totalCost, market) {
     tranches = rand < 0.50 ? 1 : rand < 0.80 ? 2 : 3;
   }
 
-  // Comisión por tramo = máx(mínimo, porcentaje) + fija bolsa (solo en ES)
   const feePerTranche = Math.max(minFeePerTranche, totalCost * pctFeePerTranche);
   let totalFee = feePerTranche * tranches;
-  if (market === "ES") totalFee += fixedFeeBase; // Canon de bolsa española
+  if (market === "ES") totalFee += fixedFeeBase;
 
   return { tranches, totalFee, feePerTranche, currency };
 }
 
-/**
- * Calcula impuestos y comisiones de venta según fiscalidad española.
- * Impuesto sobre plusvalías (IRPF España, Base del Ahorro 2024):
- *   - Hasta 6.000€ de ganancia:    19%
- *   - De 6.000 a 50.000€:          21%
- *   - Más de 50.000€:               23%
- * Comisión de venta: igual que compra (0.10% mín. 3€).
- * Para mercado US: misma retención (inversor español en el extranjero).
- */
 function calcSellFees(grossReturn, costBasis, market) {
   const currency = market === "ES" ? "EUR" : "USD";
   const gain = grossReturn - costBasis;
 
-  // Comisión del bróker (misma lógica que compra)
   const minFee = market === "ES" ? 3.0 : 1.0;
   const brokerFee = Math.max(minFee, grossReturn * 0.001) + (market === "ES" ? 2.0 : 0.50);
 
-  // Impuesto sobre plusvalías (solo si hay ganancia)
   let taxAmount = 0;
   let taxBreakdown = [];
   if (gain > 0) {
     const tramos = [
       { limit: 6000,  rate: 0.19 },
-      { limit: 44000, rate: 0.21 }, // 6k a 50k
+      { limit: 44000, rate: 0.21 },
       { limit: Infinity, rate: 0.23 }
     ];
     let remaining = gain;
@@ -116,9 +164,12 @@ function calcSellFees(grossReturn, costBasis, market) {
   return { brokerFee, taxAmount, taxBreakdown, totalDeductions, netReturn, gain, currency };
 }
 
-// Estado Global
+// ─────────────────────────────────────────────────────────────
+// ESTADO GLOBAL
+// ─────────────────────────────────────────────────────────────
+
 let state = {
-  market: "ES", 
+  market: "ES",
   balanceEs: INITIAL_BALANCE_ES,
   balanceUs: INITIAL_BALANCE_US,
   portfolioEs: [],
@@ -128,10 +179,12 @@ let state = {
     ops: 0, buys: 0, sells: 0, opsEs: 0, opsUs: 0, plEs: 0, plUs: 0, best: null, worst: null
   },
   exchangeRate: 1.08,
-  transferDir: "ES_TO_US"
+  transferDir: "ES_TO_US",
+  xp: 0,
+  activeTitle: null,
+  unlockedTitles: [],
 };
 
-// Variables para la Gráfica Interactiva
 let currentChartData = [];
 let currentChartTicker = "";
 let chartZoom = 1;
@@ -146,21 +199,47 @@ window.addEventListener("load", () => {
   updateUI();
   renderTickerChips();
   setupChartInteractions();
-  
+  updateXPBar();
+  checkDailyLogin();
+
   setInterval(refreshPortfolio, 30000);
-  refreshPortfolio(); // Carga inicial de precios al abrir
+  refreshPortfolio();
 });
+
+function checkDailyLogin() {
+  const lastLogin = localStorage.getItem("sq_last_login");
+  const today = new Date().toDateString();
+  if (lastLogin !== today) {
+    localStorage.setItem("sq_last_login", today);
+    if (state.xp > 0) { // No dar XP el primer día (ya la da el tutorial)
+      awardXP('daily_login', {});
+    }
+  }
+}
 
 function loadFromLS() {
   state.balanceEs   = parseFloat(localStorage.getItem(LS_KEYS.balanceEs));
   if (isNaN(state.balanceEs)) state.balanceEs = INITIAL_BALANCE_ES;
-  
+
   state.balanceUs   = parseFloat(localStorage.getItem(LS_KEYS.balanceUs)) || INITIAL_BALANCE_US;
   state.portfolioEs = JSON.parse(localStorage.getItem(LS_KEYS.portfolioEs)) || [];
   state.portfolioUs = JSON.parse(localStorage.getItem(LS_KEYS.portfolioUs)) || [];
   state.history     = JSON.parse(localStorage.getItem(LS_KEYS.history)) || [];
   state.stats       = JSON.parse(localStorage.getItem(LS_KEYS.stats)) || state.stats;
   state.market      = localStorage.getItem(LS_KEYS.market) || "ES";
+  state.xp          = parseInt(localStorage.getItem(LS_KEYS.xp)) || 0;
+  state.activeTitle = localStorage.getItem(LS_KEYS.activeTitle) || null;
+  state.unlockedTitles = JSON.parse(localStorage.getItem(LS_KEYS.unlockedTitles)) || [];
+
+  // Asegurar que los títulos desbloqueados corresponden al XP actual
+  const unlocked = getUnlockedLevels(state.xp);
+  state.unlockedTitles = unlocked.map(l => l.level);
+
+  // Si no hay título activo, usar el más alto desbloqueado
+  if (!state.activeTitle && state.unlockedTitles.length > 0) {
+    const highestLevel = Math.max(...state.unlockedTitles);
+    state.activeTitle = highestLevel;
+  }
 }
 
 function saveToLS() {
@@ -171,6 +250,214 @@ function saveToLS() {
   localStorage.setItem(LS_KEYS.history, JSON.stringify(state.history));
   localStorage.setItem(LS_KEYS.stats, JSON.stringify(state.stats));
   localStorage.setItem(LS_KEYS.market, state.market);
+  localStorage.setItem(LS_KEYS.xp, state.xp);
+  localStorage.setItem(LS_KEYS.activeTitle, state.activeTitle);
+  localStorage.setItem(LS_KEYS.unlockedTitles, JSON.stringify(state.unlockedTitles));
+}
+
+// ─────────────────────────────────────────────────────────────
+// SISTEMA XP — AWARD, LEVELUP, UI
+// ─────────────────────────────────────────────────────────────
+
+function awardXP(action, params) {
+  const xpGained = calcXP(action, params);
+  if (xpGained <= 0) return;
+
+  const prevLevel = getLevelData(state.xp).current.level;
+  state.xp += xpGained;
+
+  const newLevelData = getLevelData(state.xp);
+  const newLevel = newLevelData.current.level;
+
+  // Actualizar títulos desbloqueados
+  const unlocked = getUnlockedLevels(state.xp);
+  state.unlockedTitles = unlocked.map(l => l.level);
+
+  saveToLS();
+  updateXPBar();
+
+  // Mostrar XP flotante
+  showFloatingXP(xpGained);
+
+  // Level up!
+  if (newLevel > prevLevel) {
+    for (let lvl = prevLevel + 1; lvl <= newLevel; lvl++) {
+      setTimeout(() => showLevelUpModal(lvl), lvl === prevLevel + 1 ? 600 : 1200 * (lvl - prevLevel));
+    }
+  }
+}
+
+function showFloatingXP(amount) {
+  const el = document.createElement("div");
+  el.className = "floating-xp";
+  el.textContent = `+${amount} XP`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2000);
+}
+
+function updateXPBar() {
+  const ld = getLevelData(state.xp);
+  const bar = document.getElementById("xp-bar");
+  const label = document.getElementById("xp-label");
+  if (bar) bar.style.width = ld.pct + "%";
+
+  const activeLevelData = LEVELS.find(l => l.level === (state.activeTitle || ld.current.level)) || ld.current;
+
+  if (label) {
+    label.textContent = `NIV.${ld.current.level} — ${state.xp} XP`;
+  }
+
+  // Actualizar badge en header
+  updateHeaderBadge(activeLevelData, ld);
+}
+
+function updateHeaderBadge(activeLevelData, ld) {
+  const badgeEl = document.getElementById("header-player-badge");
+  if (!badgeEl) return;
+  badgeEl.innerHTML = `
+    <span class="badge-icon" style="color:${activeLevelData.color}">${activeLevelData.icon}</span>
+    <span class="badge-title" style="color:${activeLevelData.color}">${activeLevelData.title}</span>
+  `;
+  badgeEl.style.borderColor = activeLevelData.color + "55";
+  badgeEl.style.background = activeLevelData.color + "11";
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODAL LEVEL UP
+// ─────────────────────────────────────────────────────────────
+
+function showLevelUpModal(level) {
+  const levelData = LEVELS.find(l => l.level === level);
+  if (!levelData) return;
+
+  const modal = document.getElementById("modal-levelup");
+  const ld = getLevelData(state.xp);
+
+  document.getElementById("lu-level-num").textContent = level;
+  document.getElementById("lu-icon").textContent = levelData.icon;
+  document.getElementById("lu-title").textContent = levelData.title;
+  document.getElementById("lu-title").style.color = levelData.color;
+  document.getElementById("lu-desc").textContent = levelData.desc;
+  document.getElementById("lu-xp-total").textContent = state.xp + " XP";
+
+  // Partículas
+  launchConfetti(levelData.color);
+
+  modal.classList.remove("hidden");
+  modal.classList.add("levelup-animate");
+
+  // Auto-activar el nuevo título si es el más alto
+  if (!state.activeTitle || level > state.activeTitle) {
+    state.activeTitle = level;
+    saveToLS();
+    updateXPBar();
+  }
+}
+
+function closeLevelUpModal() {
+  const modal = document.getElementById("modal-levelup");
+  modal.classList.add("hidden");
+  modal.classList.remove("levelup-animate");
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONFETTI LIGERO (CSS + JS sin librerías)
+// ─────────────────────────────────────────────────────────────
+
+function launchConfetti(color) {
+  const colors = [color, "#00ff88", "#ffe600", "#00e5ff", "#ff3a5c", "#b44aff"];
+  const container = document.getElementById("confetti-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  for (let i = 0; i < 60; i++) {
+    const p = document.createElement("div");
+    p.className = "confetti-piece";
+    const c = colors[Math.floor(Math.random() * colors.length)];
+    p.style.cssText = `
+      background: ${c};
+      left: ${Math.random() * 100}%;
+      width: ${4 + Math.random() * 8}px;
+      height: ${4 + Math.random() * 8}px;
+      animation-delay: ${Math.random() * 0.5}s;
+      animation-duration: ${1.5 + Math.random() * 1.5}s;
+      border-radius: ${Math.random() > 0.5 ? "50%" : "2px"};
+    `;
+    container.appendChild(p);
+  }
+
+  setTimeout(() => { if (container) container.innerHTML = ""; }, 4000);
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODAL DE RECOMPENSAS / PERFIL
+// ─────────────────────────────────────────────────────────────
+
+function openRewardsModal() {
+  renderRewardsPanel();
+  document.getElementById("modal-rewards").classList.remove("hidden");
+}
+
+function closeRewardsModal() {
+  document.getElementById("modal-rewards").classList.add("hidden");
+}
+
+function renderRewardsPanel() {
+  const ld = getLevelData(state.xp);
+  const container = document.getElementById("rewards-levels-list");
+  container.innerHTML = "";
+
+  // Header de perfil
+  document.getElementById("rw-level").textContent = `NIVEL ${ld.current.level}`;
+  document.getElementById("rw-xp").textContent = `${state.xp} XP`;
+  document.getElementById("rw-next-xp").textContent = ld.next ? `Próximo nivel: ${ld.next.xpRequired} XP` : "¡Nivel máximo alcanzado! 🏆";
+
+  const activeLevelData = LEVELS.find(l => l.level === (state.activeTitle || ld.current.level)) || ld.current;
+  document.getElementById("rw-active-icon").textContent = activeLevelData.icon;
+  document.getElementById("rw-active-icon").style.color = activeLevelData.color;
+  document.getElementById("rw-active-title").textContent = activeLevelData.title;
+  document.getElementById("rw-active-title").style.color = activeLevelData.color;
+
+  // Lista de todos los niveles
+  LEVELS.forEach(lvl => {
+    const unlocked = state.xp >= lvl.xpRequired;
+    const isActive = state.activeTitle === lvl.level;
+    const isCurrent = ld.current.level === lvl.level;
+
+    const item = document.createElement("div");
+    item.className = `reward-item ${unlocked ? "unlocked" : "locked"} ${isActive ? "active-title" : ""}`;
+    item.style.setProperty("--lvl-color", lvl.color);
+
+    item.innerHTML = `
+      <div class="ri-left">
+        <span class="ri-icon" style="color:${unlocked ? lvl.color : "#333"}">${unlocked ? lvl.icon : "🔒"}</span>
+        <div class="ri-info">
+          <span class="ri-level-tag" style="color:${unlocked ? lvl.color : "#444"}">NIV. ${lvl.level}</span>
+          <span class="ri-title" style="color:${unlocked ? lvl.color : "#333"}">${lvl.title}</span>
+          <span class="ri-desc">${unlocked ? lvl.desc : `Desbloquea con ${lvl.xpRequired} XP`}</span>
+        </div>
+      </div>
+      <div class="ri-right">
+        ${unlocked
+          ? (isActive
+            ? `<span class="ri-badge-active">✔ ACTIVO</span>`
+            : `<button class="ri-btn-equip" onclick="equipTitle(${lvl.level})">EQUIPAR</button>`)
+          : `<span class="ri-badge-locked">${lvl.xpRequired} XP</span>`
+        }
+      </div>
+    `;
+
+    container.appendChild(item);
+  });
+}
+
+function equipTitle(level) {
+  state.activeTitle = level;
+  saveToLS();
+  updateXPBar();
+  renderRewardsPanel();
+  const lvl = LEVELS.find(l => l.level === level);
+  showToast(`Título "${lvl.title}" equipado ${lvl.icon}`, "success");
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -181,9 +468,9 @@ let searchTimeout;
 document.getElementById("buy-ticker").addEventListener("input", (e) => {
   clearTimeout(searchTimeout);
   const q = e.target.value.trim();
-  if(q.length < 2) { 
-    document.getElementById("search-suggestions").style.display = "none"; 
-    return; 
+  if(q.length < 2) {
+    document.getElementById("search-suggestions").style.display = "none";
+    return;
   }
   searchTimeout = setTimeout(() => fetchSuggestions(q), 400);
 });
@@ -210,7 +497,7 @@ function renderSuggestions(quotes) {
     div.onclick = () => {
       document.getElementById("buy-ticker").value = q.symbol;
       container.style.display = "none";
-      fetchBuyPrice(); 
+      fetchBuyPrice();
     };
     container.appendChild(div);
   });
@@ -218,27 +505,26 @@ function renderSuggestions(quotes) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GRÁFICA: RENDERIZADO (INLINE + FULLSCREEN)
+// GRÁFICA
 // ─────────────────────────────────────────────────────────────
 
 async function loadInlineChart(ticker) {
   const container = document.getElementById("inline-chart-container");
   const canvas = document.getElementById("inline-chart");
   const ctx = canvas.getContext("2d");
-  
+
   currentChartTicker = ticker;
   currentChartData = [];
   chartZoom = 1;
   chartPanX = 0;
 
-  // Forzar cálculo de layout en móvil antes de coger medidas
   container.classList.add("active");
-  void container.offsetWidth; 
-  
+  void container.offsetWidth;
+
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width;
-  canvas.height = 220; 
-  
+  canvas.height = 220;
+
   ctx.clearRect(0,0, canvas.width, canvas.height);
   ctx.fillStyle = "#5a7a9a";
   ctx.font = "12px 'Share Tech Mono'";
@@ -249,24 +535,21 @@ async function loadInlineChart(ticker) {
     const targetUrl = `${YF_URL}${encodeURIComponent(ticker)}?interval=1d&range=6mo`;
     const res = await fetch(CORS_PROXY + encodeURIComponent(targetUrl));
     const data = await res.json();
-    
+
     const result = data.chart.result[0];
     const quote = result.indicators.quote[0];
     const timestamps = result.timestamp;
-    
+
     for (let i = 0; i < quote.close.length; i++) {
-        if (quote.close[i] && quote.open[i]) {
-            const dateObj = new Date(timestamps[i] * 1000);
-            const dateStr = dateObj.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
-            
-            currentChartData.push({ 
-                o: quote.open[i], h: quote.high[i], l: quote.low[i], c: quote.close[i], dateStr: dateStr
-            });
-        }
+      if (quote.close[i] && quote.open[i]) {
+        const dateObj = new Date(timestamps[i] * 1000);
+        const dateStr = dateObj.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
+        currentChartData.push({
+          o: quote.open[i], h: quote.high[i], l: quote.low[i], c: quote.close[i], dateStr
+        });
+      }
     }
-    if(currentChartData.length > 0) {
-        drawCandlesticks(canvas, currentChartData, 1, 0);
-    }
+    if (currentChartData.length > 0) drawCandlesticks(canvas, currentChartData, 1, 0);
   } catch(e) {
     ctx.clearRect(0,0, canvas.width, canvas.height);
     ctx.fillText("Gráfica no disponible", canvas.width/2, canvas.height/2);
@@ -277,7 +560,7 @@ function drawCandlesticks(canvas, data, zoom, panX) {
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
-  
+
   if(rect.width === 0) return;
 
   canvas.width = rect.width * dpr;
@@ -286,12 +569,11 @@ function drawCandlesticks(canvas, data, zoom, panX) {
 
   const w = rect.width;
   const h = rect.height;
-  const pad = { t: 20, b: 25, l: 10, r: 45 }; 
+  const pad = { t: 20, b: 25, l: 10, r: 45 };
   const drawW = w - pad.l - pad.r;
   const drawH = h - pad.t - pad.b;
 
   ctx.clearRect(0, 0, w, h);
-
   if (!data || data.length === 0) return;
 
   const baseSpacing = drawW / data.length;
@@ -299,11 +581,10 @@ function drawCandlesticks(canvas, data, zoom, panX) {
   const candleW = Math.max(1, spacing * 0.7);
 
   let visibleCandles = data.filter((d, i) => {
-      const reverseIdx = data.length - 1 - i;
-      const x = (w - pad.r) - (reverseIdx * spacing) - (spacing / 2) + panX;
-      return x >= pad.l && x <= w - pad.r;
+    const reverseIdx = data.length - 1 - i;
+    const x = (w - pad.r) - (reverseIdx * spacing) - (spacing / 2) + panX;
+    return x >= pad.l && x <= w - pad.r;
   });
-  
   if(visibleCandles.length === 0) visibleCandles = data;
 
   const maxH = Math.max(...visibleCandles.map(d => d.h));
@@ -318,8 +599,7 @@ function drawCandlesticks(canvas, data, zoom, panX) {
   for(let i=0; i<=gridSteps; i++) {
     const y = pad.t + (i/gridSteps) * drawH;
     const price = maxH - (i/gridSteps) * range;
-    
-    ctx.strokeStyle = "rgba(0, 229, 255, 0.08)"; 
+    ctx.strokeStyle = "rgba(0, 229, 255, 0.08)";
     ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
     ctx.fillStyle = "#a8c0d8";
     ctx.fillText(price.toFixed(2), w - pad.r + 5, y);
@@ -328,7 +608,6 @@ function drawCandlesticks(canvas, data, zoom, panX) {
   data.forEach((d, i) => {
     const reverseIdx = data.length - 1 - i;
     const x = (w - pad.r) - (reverseIdx * spacing) - (spacing / 2) + panX;
-
     if (x < pad.l - candleW || x > w - pad.r + candleW) return;
 
     const yO = pad.t + (1 - (d.o - minL) / range) * drawH;
@@ -336,126 +615,108 @@ function drawCandlesticks(canvas, data, zoom, panX) {
     const yH = pad.t + (1 - (d.h - minL) / range) * drawH;
     const yL = pad.t + (1 - (d.l - minL) / range) * drawH;
 
-    const color = d.c >= d.o ? "#00ff88" : "#ff3a5c"; 
-    
-    ctx.strokeStyle = color; 
+    const color = d.c >= d.o ? "#00ff88" : "#ff3a5c";
+    ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    
     ctx.beginPath(); ctx.moveTo(x, yH); ctx.lineTo(x, yL); ctx.stroke();
-    
     const bodyTop = Math.min(yO, yC);
     const bodyHeight = Math.max(1, Math.abs(yO - yC));
     ctx.fillRect(x - candleW/2, bodyTop, candleW, bodyHeight);
 
     const showEvery = Math.max(1, Math.floor(data.length / (5 * zoom)));
     if (i % showEvery === 0 || i === data.length - 1) {
-        ctx.fillStyle = "#5a7a9a";
-        ctx.textAlign = "center";
-        ctx.fillText(d.dateStr, x, h - 5);
-        ctx.strokeStyle = "rgba(255,255,255,0.05)";
-        ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, h - pad.b + 5); ctx.stroke();
+      ctx.fillStyle = "#5a7a9a";
+      ctx.textAlign = "center";
+      ctx.fillText(d.dateStr, x, h - 5);
+      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, h - pad.b + 5); ctx.stroke();
     }
   });
 }
 
-// ─────────────────────────────────────────────────────────────
-// INTERACTIVIDAD Y MODAL DE LA GRÁFICA
-// ─────────────────────────────────────────────────────────────
-
-// Esta función es llamada desde el HTML ahora (onclick="openChartModal()")
 function openChartModal() {
-    if (currentChartData.length > 0) {
-         document.getElementById("modal-chart-fs").classList.remove("hidden");
-         document.getElementById("fs-chart-title").textContent = `${currentChartTicker} - ANÁLISIS`;
-         setTimeout(() => {
-            const fsCanvas = document.getElementById("fullscreen-chart");
-            drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
-         }, 50);
-     }
+  if (currentChartData.length > 0) {
+    document.getElementById("modal-chart-fs").classList.remove("hidden");
+    document.getElementById("fs-chart-title").textContent = `${currentChartTicker} - ANÁLISIS`;
+    setTimeout(() => {
+      const fsCanvas = document.getElementById("fullscreen-chart");
+      drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
+    }, 50);
+  }
 }
 
 function setupChartInteractions() {
   const fsCanvas = document.getElementById("fullscreen-chart");
-  
   let isDragging = false;
   let startClientX = 0;
 
   fsCanvas.addEventListener('pointerdown', (e) => {
-      isDragging = true;
-      startClientX = e.clientX;
-      fsCanvas.setPointerCapture(e.pointerId);
+    isDragging = true;
+    startClientX = e.clientX;
+    fsCanvas.setPointerCapture(e.pointerId);
   });
-  
   fsCanvas.addEventListener('pointermove', (e) => {
-      if (!isDragging) return;
-      const deltaX = e.clientX - startClientX;
-      chartPanX += deltaX; 
-      startClientX = e.clientX;
-      
-      const rect = fsCanvas.getBoundingClientRect();
-      const drawW = rect.width - 10 - 45; 
-      const totalGraphW = (drawW / currentChartData.length) * chartZoom * currentChartData.length;
-      
-      const maxPanX = Math.max(0, totalGraphW - drawW);
-      chartPanX = Math.max(0, Math.min(chartPanX, maxPanX));
-      
-      drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
+    if (!isDragging) return;
+    const deltaX = e.clientX - startClientX;
+    chartPanX += deltaX;
+    startClientX = e.clientX;
+    const rect = fsCanvas.getBoundingClientRect();
+    const drawW = rect.width - 10 - 45;
+    const totalGraphW = (drawW / currentChartData.length) * chartZoom * currentChartData.length;
+    const maxPanX = Math.max(0, totalGraphW - drawW);
+    chartPanX = Math.max(0, Math.min(chartPanX, maxPanX));
+    drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
   });
-  
   fsCanvas.addEventListener('pointerup', () => isDragging = false);
   fsCanvas.addEventListener('pointercancel', () => isDragging = false);
-
   fsCanvas.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const zoomDelta = e.deltaY * -0.005;
-      chartZoom += zoomDelta;
-      chartZoom = Math.max(1, Math.min(chartZoom, 20)); 
-      drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
+    e.preventDefault();
+    const zoomDelta = e.deltaY * -0.005;
+    chartZoom += zoomDelta;
+    chartZoom = Math.max(1, Math.min(chartZoom, 20));
+    drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
   });
 
   let initialPinchDist = null;
   fsCanvas.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 2) {
-          initialPinchDist = Math.hypot(
-              e.touches[0].clientX - e.touches[1].clientX,
-              e.touches[0].clientY - e.touches[1].clientY
-          );
-      }
+    if (e.touches.length === 2) {
+      initialPinchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
   }, {passive: false});
-  
   fsCanvas.addEventListener('touchmove', (e) => {
-      e.preventDefault(); 
-      if (e.touches.length === 2 && initialPinchDist) {
-          const currentDist = Math.hypot(
-              e.touches[0].clientX - e.touches[1].clientX,
-              e.touches[0].clientY - e.touches[1].clientY
-          );
-          const zoomDelta = (currentDist - initialPinchDist) * 0.02;
-          chartZoom += zoomDelta;
-          chartZoom = Math.max(1, Math.min(chartZoom, 20));
-          initialPinchDist = currentDist;
-          drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
-      }
+    e.preventDefault();
+    if (e.touches.length === 2 && initialPinchDist) {
+      const currentDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const zoomDelta = (currentDist - initialPinchDist) * 0.02;
+      chartZoom += zoomDelta;
+      chartZoom = Math.max(1, Math.min(chartZoom, 20));
+      initialPinchDist = currentDist;
+      drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
+    }
   }, {passive: false});
-  
   fsCanvas.addEventListener('touchend', (e) => {
-      if (e.touches.length < 2) initialPinchDist = null;
+    if (e.touches.length < 2) initialPinchDist = null;
   });
-
   window.addEventListener('resize', () => {
-      if (!document.getElementById("modal-chart-fs").classList.contains("hidden")) {
-         drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
-      }
+    if (!document.getElementById("modal-chart-fs").classList.contains("hidden")) {
+      drawCandlesticks(fsCanvas, currentChartData, chartZoom, chartPanX);
+    }
   });
 }
 
 function closeChartModal() {
-    document.getElementById("modal-chart-fs").classList.add("hidden");
-    drawCandlesticks(document.getElementById("inline-chart"), currentChartData, chartZoom, chartPanX);
+  document.getElementById("modal-chart-fs").classList.add("hidden");
+  drawCandlesticks(document.getElementById("inline-chart"), currentChartData, chartZoom, chartPanX);
 }
 
 // ─────────────────────────────────────────────────────────────
-// LÓGICA DE TRADING Y ESTADO
+// TRADING
 // ─────────────────────────────────────────────────────────────
 
 async function fetchPrice(ticker) {
@@ -469,16 +730,13 @@ async function fetchPrice(ticker) {
 async function fetchBuyPrice() {
   const ticker = document.getElementById("buy-ticker").value.trim().toUpperCase();
   if (!ticker) return;
-
   const priceEl = document.getElementById("buy-price");
   priceEl.textContent = "Cargando...";
-
   try {
     const price = await fetchPrice(ticker);
     priceEl.dataset.price = price;
     priceEl.dataset.ticker = ticker;
     priceEl.textContent = formatAmount(price, getCurrency());
-    
     updateBuyCost();
     loadInlineChart(ticker);
   } catch (err) {
@@ -513,18 +771,18 @@ function executeBuy() {
   const ticker = document.getElementById("buy-price").dataset.ticker;
   const price = parseFloat(document.getElementById("buy-price").dataset.price);
   const qty = parseInt(document.getElementById("buy-qty").value);
-  
+
   if(!ticker || !price || qty <= 0) { showToast("Datos de compra inválidos", "error"); return; }
-  
+
   const cost = price * qty;
   const fees = calcBuyFees(cost, state.market);
   const totalWithFees = cost + fees.totalFee;
   const balanceKey = state.market === "ES" ? "balanceEs" : "balanceUs";
-  
+
   if(state[balanceKey] < totalWithFees) { showToast("Saldo insuficiente (incluyendo comisiones)", "error"); return; }
-  
+
   state[balanceKey] -= totalWithFees;
-  
+
   const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
   const pos = portfolio.find(p => p.ticker === ticker);
   if(pos) {
@@ -533,10 +791,21 @@ function executeBuy() {
   } else {
     portfolio.push({ ticker, qty, price });
   }
-  
+
   addHistory("COMPRA", ticker, qty, price, state.market);
   updateStats("buy", cost, state.market);
-  
+
+  // XP por compra
+  const isFirstBuyEs = state.market === "ES" && state.stats.opsEs === 1;
+  const isFirstBuyUs = state.market === "US" && state.stats.opsUs === 1;
+  awardXP('buy', { cost });
+  if (isFirstBuyEs) awardXP('first_buy_es', {});
+  if (isFirstBuyUs) awardXP('first_buy_us', {});
+
+  // Diversificación
+  const portfolioAll = [...state.portfolioEs, ...state.portfolioUs];
+  if (portfolioAll.length >= 3) awardXP('diversification', {});
+
   saveToLS();
   updateUI();
   resetBuyForm();
@@ -555,7 +824,7 @@ function updateStats(type, amount, market) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// INTERFAZ, UTILIDADES Y FUNCIONES QUE FALTABAN
+// UI ACTUALIZADA
 // ─────────────────────────────────────────────────────────────
 
 function updateUI() {
@@ -565,25 +834,30 @@ function updateUI() {
 
   document.getElementById("header-saldo-es").textContent = formatAmount(state.balanceEs, "EUR");
   document.getElementById("header-saldo-us").textContent = formatAmount(state.balanceUs, "USD");
-  
+
   document.getElementById("portfolio-panel-title").textContent = isEs ? "🎮 CARTERA ESPAÑOLA" : "🎮 CARTERA USA";
   document.getElementById("portfolio-cash").textContent = formatAmount(balance, currency);
-  
+
   document.getElementById("mkt-es").classList.toggle("active", isEs);
   document.getElementById("mkt-us").classList.toggle("active", !isEs);
-  
+
+  // Market body class
+  document.body.classList.toggle("market-es", isEs);
+  document.body.classList.toggle("market-us", !isEs);
+
   renderPortfolio();
   populateSellSelect();
   updateNetWorth();
   renderHistory();
   renderStats();
+  updateXPBar();
 }
 
 function renderPortfolio() {
   const container = document.getElementById("portfolio-body");
   const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
   const currency = getCurrency();
-  
+
   container.innerHTML = "";
   if(portfolio.length === 0) {
     container.innerHTML = '<tr><td colspan="6" class="empty-row">No hay posiciones</td></tr>';
@@ -619,15 +893,10 @@ function renderPortfolio() {
 function updateNetWorth() {
   let totalPortfolioEs = 0;
   let totalPortfolioUs = 0;
-  
-  state.portfolioEs.forEach(pos => {
-      totalPortfolioEs += (pos.currentPrice || pos.price) * pos.qty;
-  });
-  state.portfolioUs.forEach(pos => {
-      totalPortfolioUs += (pos.currentPrice || pos.price) * pos.qty;
-  });
 
-  // Cálculo en Euros sumando todo (usando exchange rate para convertir USD a EUR)
+  state.portfolioEs.forEach(pos => { totalPortfolioEs += (pos.currentPrice || pos.price) * pos.qty; });
+  state.portfolioUs.forEach(pos => { totalPortfolioUs += (pos.currentPrice || pos.price) * pos.qty; });
+
   const totalEur = state.balanceEs + totalPortfolioEs + ((state.balanceUs + totalPortfolioUs) / state.exchangeRate);
   const totalCostEur = INITIAL_BALANCE_ES + (INITIAL_BALANCE_US / state.exchangeRate);
 
@@ -636,14 +905,14 @@ function updateNetWorth() {
   const pl = totalEur - totalCostEur;
   const plEl = document.getElementById("header-pl");
   plEl.textContent = `${pl >= 0 ? '+' : ''}${formatAmount(pl, "EUR")}`;
-  
+
   const headerPlPill = document.getElementById("header-pl-pill");
   if (pl >= 0) {
-     headerPlPill.classList.add("gain");
-     headerPlPill.classList.remove("loss");
+    headerPlPill.classList.add("gain");
+    headerPlPill.classList.remove("loss");
   } else {
-     headerPlPill.classList.add("loss");
-     headerPlPill.classList.remove("gain");
+    headerPlPill.classList.add("loss");
+    headerPlPill.classList.remove("gain");
   }
 }
 
@@ -653,11 +922,11 @@ function renderStats() {
   document.getElementById("stat-sells").textContent = state.stats.sells;
   document.getElementById("stat-ops-es").textContent = state.stats.opsEs;
   document.getElementById("stat-ops-us").textContent = state.stats.opsUs;
-  
+
   const plEsEl = document.getElementById("stat-pl-es");
   plEsEl.textContent = formatAmount(state.stats.plEs, "EUR");
   plEsEl.className = `stat-card-val ${state.stats.plEs >= 0 ? 'green' : 'red'}`;
-  
+
   const plUsEl = document.getElementById("stat-pl-us");
   plUsEl.textContent = formatAmount(state.stats.plUs, "USD");
   plUsEl.className = `stat-card-val ${state.stats.plUs >= 0 ? 'green' : 'red'}`;
@@ -715,32 +984,32 @@ function renderTickerChips() {
     const btn = document.createElement("button");
     btn.className = "ticker-chip-btn";
     btn.textContent = t;
-    btn.onclick = () => { 
-        document.getElementById("buy-ticker").value = t; 
-        fetchBuyPrice(); 
+    btn.onclick = () => {
+      document.getElementById("buy-ticker").value = t;
+      fetchBuyPrice();
     };
     container.appendChild(btn);
   });
 }
 
 // ─────────────────────────────────────────────────────────────
-// IMPLEMENTACIÓN DE LAS FUNCIONES RESTANTES
+// PORTFOLIO REFRESH & SELL
 // ─────────────────────────────────────────────────────────────
 
 async function refreshPortfolio() {
   const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
   if (portfolio.length === 0) return;
-  
+
   const btn = document.querySelector(".btn-refresh");
   if (btn) btn.textContent = "↻ Cargando...";
-  
+
   for(let pos of portfolio) {
     try {
       const price = await fetchPrice(pos.ticker);
       pos.currentPrice = price;
     } catch(e) {}
   }
-  
+
   updateUI();
   if (btn) btn.textContent = "↻ ACTUALIZAR";
 }
@@ -765,12 +1034,12 @@ async function onSellTickerChange() {
   const pos = portfolio.find(p => p.ticker === ticker);
   document.getElementById("sell-max").textContent = pos ? pos.qty : 0;
   document.getElementById("sell-price").textContent = "Cargando...";
-  
+
   try {
     const price = await fetchPrice(ticker);
     document.getElementById("sell-price").dataset.price = price;
     document.getElementById("sell-price").textContent = formatAmount(price, getCurrency());
-    if(pos) pos.currentPrice = price; 
+    if(pos) pos.currentPrice = price;
     updateSellReturn();
   } catch(e) {
     document.getElementById("sell-price").textContent = "Error";
@@ -788,10 +1057,10 @@ function updateSellReturn() {
     const grossReturn = price * qty;
     const costBasis = pos.price * qty;
     const fees = calcSellFees(grossReturn, costBasis, state.market);
-    
+
     document.getElementById("sell-total-return").innerHTML =
       `${formatAmount(fees.netReturn, getCurrency())} <span style="font-size:0.75em;color:var(--text-muted);">(−${formatAmount(fees.totalDeductions, getCurrency())} tasas)</span>`;
-    
+
     const pnlNet = fees.netReturn - costBasis;
     const pnlEl = document.getElementById("sell-pnl-est");
     pnlEl.textContent = formatAmount(pnlNet, getCurrency());
@@ -837,10 +1106,13 @@ function executeSell() {
 
   addHistory("VENTA", ticker, qty, price, state.market);
   updateStats("sell", grossReturn, state.market);
-  
+
+  // XP por venta (basada en ganancia neta)
+  awardXP('sell_profit', { netGain: pnlAfterFees, pct: pnlPct });
+
   saveToLS();
   updateUI();
-  
+
   document.getElementById("sell-qty").value = "";
   document.getElementById("sell-ticker").value = "";
   onSellTickerChange();
@@ -852,21 +1124,21 @@ function renderHistory(filter = 'all') {
   const container = document.getElementById("history-list");
   container.innerHTML = "";
   let filtered = state.history;
-  
+
   if(filter !== 'all') {
     filtered = state.history.filter(h => h.market === filter || (filter === 'xfer' && h.type === 'TRASP.'));
   }
-  
+
   if(filtered.length === 0) {
     container.innerHTML = '<div class="empty-history">Aún no hay operaciones</div>';
     return;
   }
-  
+
   filtered.forEach(h => {
     const isEs = h.market === 'ES';
     const curr = isEs ? 'EUR' : 'USD';
     const val = h.type === 'TRASP.' ? `Tipo: ${h.price.toFixed(4)}` : formatAmount(h.price * h.qty, curr);
-    
+
     container.innerHTML += `
       <div class="history-item ${h.type.toLowerCase() === 'venta' ? 'sell' : (h.type === 'TRASP.' ? 'xfer' : 'buy')}">
         <span class="history-badge" style="background:${h.type === 'COMPRA' ? 'rgba(0,255,136,0.1)' : (h.type === 'VENTA' ? 'rgba(255,58,92,0.1)' : 'rgba(0,229,255,0.1)')}; color:${h.type === 'COMPRA' ? 'var(--neon-green)' : (h.type === 'VENTA' ? 'var(--neon-red)' : 'var(--neon-cyan)')}">${h.type}</span>
@@ -886,19 +1158,23 @@ function filterHistory(f) {
   renderHistory(f);
 }
 
+// ─────────────────────────────────────────────────────────────
+// MODALES TRANSFER & RESET
+// ─────────────────────────────────────────────────────────────
+
 function openTransferModal() {
   document.getElementById("modal-transfer").classList.remove("hidden");
   loadExchangeRate();
 }
-function closeTransferModal() { 
-  document.getElementById("modal-transfer").classList.add("hidden"); 
+function closeTransferModal() {
+  document.getElementById("modal-transfer").classList.add("hidden");
 }
 
 function openResetModal() {
   document.getElementById("modal-reset").classList.remove("hidden");
 }
-function closeResetModal() { 
-  document.getElementById("modal-reset").classList.add("hidden"); 
+function closeResetModal() {
+  document.getElementById("modal-reset").classList.add("hidden");
 }
 
 function confirmReset() {
@@ -909,8 +1185,12 @@ function confirmReset() {
   state.portfolioUs = [];
   state.history = [];
   state.stats = { ops: 0, buys: 0, sells: 0, opsEs: 0, opsUs: 0, plEs: 0, plUs: 0, best: null, worst: null };
+  state.xp = 0;
+  state.activeTitle = null;
+  state.unlockedTitles = [];
   saveToLS();
   updateUI();
+  updateXPBar();
   closeResetModal();
   showToast("Juego reiniciado por completo", "success");
 }
@@ -921,7 +1201,7 @@ async function loadExchangeRate() {
     const data = await res.json();
     state.exchangeRate = data.chart.result[0].meta.regularMarketPrice;
   } catch(e) {
-    state.exchangeRate = 1.08; // Valor de respaldo por si falla Yahoo
+    state.exchangeRate = 1.08;
   }
   document.getElementById("er-value").textContent = `1 EUR = ${state.exchangeRate.toFixed(4)} USD`;
   updateTransferPreview();
@@ -938,13 +1218,13 @@ function setTransferDir(dir) {
 function updateTransferPreview() {
   const amt = parseFloat(document.getElementById("transfer-amount").value) || 0;
   const isEsToUs = state.transferDir === "ES_TO_US";
-  
+
   document.getElementById("transfer-label").textContent = isEsToUs ? "IMPORTE EN EUR A ENVIAR" : "IMPORTE EN USD A ENVIAR";
   document.getElementById("tp-from-lbl").textContent = isEsToUs ? "Envías desde 🇪🇸" : "Envías desde 🇺🇸";
   document.getElementById("tp-to-lbl").textContent = isEsToUs ? "Recibes en 🇺🇸" : "Recibes en 🇪🇸";
-  
+
   document.getElementById("tp-from-val").textContent = formatAmount(amt, isEsToUs ? "EUR" : "USD");
-  
+
   let received = isEsToUs ? amt * state.exchangeRate : amt / state.exchangeRate;
   document.getElementById("tp-to-val").textContent = formatAmount(received, isEsToUs ? "USD" : "EUR");
 
@@ -962,7 +1242,7 @@ function executeTransfer() {
   if(!isEsToUs && state.balanceUs < amt) return showToast("Saldo USD insuficiente", "error");
 
   let received = isEsToUs ? amt * state.exchangeRate : amt / state.exchangeRate;
-  
+
   if(isEsToUs) {
     state.balanceEs -= amt;
     state.balanceUs += received;
@@ -972,13 +1252,15 @@ function executeTransfer() {
   }
 
   addHistory("TRASP.", isEsToUs ? "EUR->USD" : "USD->EUR", 0, state.exchangeRate, isEsToUs ? "ES" : "US");
+  awardXP('transfer', {});
   saveToLS();
   updateUI();
   closeTransferModal();
   showToast("Transferencia completada", "success");
 }
+
 // ─────────────────────────────────────────────────────────────
-// MODALES DE DESGLOSE DE COMISIONES Y FISCALIDAD
+// MODALES COMISIONES
 // ─────────────────────────────────────────────────────────────
 
 function showBuyFeeModal(ticker, qty, price, cost, fees) {
@@ -1088,4 +1370,17 @@ function showSellFeeModal(ticker, qty, price, grossReturn, costBasis, fees) {
 
 function closeFeeModal() {
   document.getElementById("modal-fees").classList.add("hidden");
+}
+
+// ─────────────────────────────────────────────────────────────
+// MARKET BANNER UPDATE
+// ─────────────────────────────────────────────────────────────
+
+function updateMarketBanner() {
+  const isEs = state.market === "ES";
+  document.getElementById("mb-flag").textContent = isEs ? "🇪🇸" : "🇺🇸";
+  document.getElementById("mb-name").textContent = isEs ? "MERCADO ESPAÑOL — IBEX 35 & BME" : "MERCADO USA — NYSE & NASDAQ";
+  document.getElementById("mb-hint").textContent = isEs
+    ? "IBE.MC · BBVA.MC · SAN.MC · ITX.MC · REP.MC · AMS.MC · TEF.MC · ACX.MC"
+    : "AAPL · TSLA · NVDA · MSFT · AMZN · META · BTC-USD · GOOGL";
 }
