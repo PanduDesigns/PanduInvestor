@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   PANDU INVESTOR — styles.css  (Gamificación XP + Tienda)
+   PANDU INVESTOR — styles.css  (Gamificación XP + Tienda v4)
    ═══════════════════════════════════════════════════════════ */
 
 :root {
@@ -69,7 +69,7 @@ body {
   flex-wrap: nowrap; overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(0,229,255,0.2) transparent;
-  padding-bottom: 4px; /* Para que el scroll no tape */
+  padding-bottom: 4px;
 }
 .header-inner::-webkit-scrollbar { height: 4px; }
 .header-inner::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.3); border-radius: 4px; }
@@ -127,6 +127,19 @@ body {
 .header-player-badge:hover { background: rgba(0,229,255,0.15); box-shadow: 0 0 12px rgba(0,229,255,0.25); transform: translateY(-1px); }
 .badge-icon { font-size: 1rem; line-height: 1; }
 .badge-title { font-family: var(--font-arcade); font-size: 0.3rem; color: var(--neon-cyan); letter-spacing: 0.5px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Mini avatar en cabecera */
+.header-avatar-btn {
+  background: rgba(180,74,255,0.1); border: 2px solid rgba(180,74,255,0.4);
+  border-radius: 8px; padding: 2px 4px; cursor: pointer; transition: all 0.2s ease;
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  image-rendering: pixelated;
+}
+.header-avatar-btn:hover {
+  border-color: var(--neon-purple); box-shadow: 0 0 14px rgba(180,74,255,0.5);
+  transform: translateY(-1px);
+}
+#header-avatar-canvas { image-rendering: pixelated; display: block; }
 
 .header-actions { display: flex; gap: 5px; flex-shrink: 0; }
 .btn-transfer, .btn-reset, .btn-avatar {
@@ -282,6 +295,8 @@ body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,
 .dir-btn { background: var(--bg-input); border: 2px solid var(--border-panel); color: var(--text-muted); font-family: var(--font-arcade); font-size: 0.32rem; padding: 10px 6px; border-radius: var(--radius); cursor: pointer; }
 .dir-btn.active { border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(0,229,255,0.08); }
 .tp-row { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.9rem; width: 100%; }
+.transfer-preview { flex-direction: column; gap: 6px; }
+.tp-arrow { text-align: center; color: var(--neon-cyan); font-size: 1.2rem; }
 .transfer-balances { margin-top: 10px; display: flex; justify-content: space-between; font-family: var(--font-arcade); font-size: 0.28rem; color: var(--text-muted); }
 
 /* ═══════════════════════════════════════════════════════════
@@ -299,6 +314,8 @@ body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,
 .fee-row.fee-total-net { background: rgba(0,255,136,0.08); border-radius: 6px; padding: 8px 10px; font-weight: 700; font-size: 1rem; border: 1px solid rgba(0,255,136,0.25); }
 .fee-row.fee-pct { font-size: 0.75rem; color: var(--text-muted); text-align: right; justify-content: flex-end; gap: 8px; }
 .fee-divider { height: 1px; background: rgba(0,229,255,0.12); margin: 4px 0; border: none;}
+.price-badge { font-family: var(--font-arcade); font-size: 0.3rem; }
+.game-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='%2300e5ff' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 10px; padding-right: 30px; cursor: pointer; }
 
 /* Level Up */
 .modal-levelup-box { max-width: 380px; width: 95%; border-color: var(--neon-yellow); box-shadow: 0 0 80px rgba(255,230,0,0.3), 0 0 30px rgba(255,230,0,0.15); background: linear-gradient(160deg, #0d1530, #1a1200 120%); overflow: hidden; padding: 30px 24px; animation: luAppear 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
@@ -325,7 +342,8 @@ body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,
 /* Rewards */
 .modal-rewards-box { max-width: 520px; width: 95%; border-color: var(--neon-cyan); box-shadow: 0 0 60px rgba(0,229,255,0.2); max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
 .rw-profile { display: flex; align-items: center; gap: 16px; background: rgba(0,229,255,0.05); border: 1px solid rgba(0,229,255,0.15); border-radius: var(--radius-lg); padding: 14px; margin-bottom: 14px; flex-shrink: 0; }
-.rw-avatar { width: 60px; height: 60px; border-radius: 50%; background: var(--bg-card); border: 2px solid var(--neon-cyan); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 20px rgba(0,229,255,0.2); }
+.rw-avatar { width: 60px; height: 80px; border-radius: 8px; background: var(--bg-card); border: 2px solid var(--neon-cyan); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 20px rgba(0,229,255,0.2); overflow: hidden; }
+#rewards-avatar-canvas { image-rendering: pixelated; }
 .rw-profile-info { display: flex; flex-direction: column; gap: 2px; text-align: left; }
 .rw-active-title-label { font-family: var(--font-arcade); font-size: 0.26rem; color: var(--text-muted); }
 .rw-active-title-val { font-family: var(--font-arcade); font-size: 0.5rem; color: var(--neon-cyan); }
@@ -363,71 +381,222 @@ body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,
 .toast.error   { border-color: var(--neon-red);   color: var(--neon-red); }
 
 /* ═══════════════════════════════════════════════════════════
-   MÓDULO AVATAR 16-BIT Y TIENDA
+   MÓDULO AVATAR 16-BIT MEJORADO
    ═══════════════════════════════════════════════════════════ */
-#view-avatar { display: flex; flex-direction: column; gap: 15px; }
-.avatar-showcase { 
-  background: var(--bg-input); border: 2px solid var(--neon-purple); border-radius: var(--radius);
-  height: 150px; display: flex; align-items: center; justify-content: center;
-  box-shadow: inset 0 0 20px rgba(180, 74, 255, 0.2); position: relative; overflow: hidden;
+
+/* Modal avatar más ancho */
+.modal-avatar-box {
+  max-width: 620px; width: 98%; border-color: var(--neon-purple);
+  box-shadow: 0 0 60px rgba(180,74,255,0.25);
+  max-height: 95vh; overflow-y: auto;
 }
 
-/* Personaje CSS (Estilo 16 bits bloque) */
-.px-character {
-  width: 64px; height: 96px; position: relative;
-  transform: scale(1.5); transform-origin: bottom center;
-}
-.px-head {
-  width: 32px; height: 32px; background: var(--av-skin);
-  position: absolute; top: 16px; left: 16px; z-index: 2;
-  box-shadow: inset -4px -4px 0 rgba(0,0,0,0.15); border-radius: 4px;
-}
-.px-eye { width: 6px; height: 6px; background: var(--av-eyes); position: absolute; top: 12px; z-index: 3;}
-.px-eye.left { left: 6px; } .px-eye.right { right: 6px; }
-.px-hair {
-  width: 36px; height: 12px; background: var(--av-hair);
-  position: absolute; top: 12px; left: 14px; z-index: 4;
-  border-radius: 6px 6px 0 0;
-}
-.px-hair.style-long { height: 36px; width: 40px; left: 12px; z-index: 1; border-radius: 12px 12px 0 0; }
-.px-hair.style-spiky { border-radius: 2px; box-shadow: 0 -4px 0 var(--av-hair), -4px -2px 0 var(--av-hair), 4px -2px 0 var(--av-hair); }
-.px-hair.style-none { display: none; }
-.px-body {
-  width: 48px; height: 48px; background: var(--av-clothes);
-  position: absolute; top: 48px; left: 8px; z-index: 1;
-  border-radius: 8px 8px 0 0; box-shadow: inset -6px 0 0 rgba(0,0,0,0.2);
-  display: flex; justify-content: center; align-items: center; font-size: 1.5rem;
-}
-.px-acc {
-  position: absolute; top: 8px; left: -2px; width: 36px; text-align: center;
-  font-size: 1.2rem; z-index: 5; pointer-events: none;
-}
-.px-pet {
-  position: absolute; bottom: 0; right: -30px; font-size: 1.8rem;
-  z-index: 3; filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.5));
+/* Escenario del avatar */
+.avatar-scene {
+  background: linear-gradient(180deg, #0a0d1f 0%, #101428 60%, #151a30 100%);
+  border: 2px solid var(--neon-purple);
+  border-radius: var(--radius-lg);
+  height: 200px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 16px;
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.6), inset 0 0 80px rgba(180,74,255,0.05);
 }
 
-/* Controles Avatar */
-.avatar-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; max-height: 250px; overflow-y: auto; padding-right: 5px; }
+/* Estrellas de fondo animadas */
+.avatar-scene::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 15% 20%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 10%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 70% 25%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 85% 15%, rgba(0,229,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 55% 30%, rgba(255,255,255,0.4) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Edificios de ciudad al fondo */
+.avatar-scene::after {
+  content: '';
+  position: absolute; bottom: 48px; left: 0; right: 0; height: 80px;
+  background-image:
+    linear-gradient(to top, #1a1f3a 0%, #1a1f3a 60%, transparent 60%),
+    linear-gradient(to top, #141928 0%, #141928 80%, transparent 80%),
+    linear-gradient(to top, #0f1220 0%, #0f1220 50%, transparent 50%);
+  background-size: 40px 100%, 55px 100%, 30px 100%;
+  background-position: 10px 0, 60px 0, 120px 0;
+  background-repeat: no-repeat;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.avatar-stage {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 16px;
+  gap: 20px;
+}
+
+.stage-ground {
+  position: absolute;
+  bottom: 0; left: 0; right: 0; height: 48px;
+  background: linear-gradient(to top, #0a0c18 0%, #111526 40%, #161c32 100%);
+  border-top: 2px solid rgba(0,229,255,0.15);
+  box-shadow: 0 -4px 20px rgba(0,229,255,0.08);
+}
+
+.avatar-char-wrap {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+#avatar-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+  /* Scale up 3x for visibility */
+  width: 192px;
+  height: 288px;
+  filter: drop-shadow(0 0 12px rgba(180,74,255,0.4));
+  animation: avatarFloat 3s ease-in-out infinite;
+}
+
+@keyframes avatarFloat {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4px); }
+}
+
+.avatar-pet-display {
+  font-size: 2.8rem;
+  z-index: 11;
+  filter: drop-shadow(2px 0 0 #000) drop-shadow(-2px 0 0 #000) drop-shadow(0 2px 0 #000) drop-shadow(0 -2px 0 #000);
+  image-rendering: pixelated;
+  animation: avatarFloat 2.5s ease-in-out infinite 0.5s;
+}
+
+.avatar-car-display {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  width: 180px;
+  height: 105px;
+  z-index: 9;
+  position: relative;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+}
+
+.avatar-name-tag {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-arcade);
+  font-size: 0.38rem;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 8px var(--neon-cyan);
+  letter-spacing: 2px;
+  z-index: 20;
+}
+
+/* Controles del avatar */
+.avatar-controls { display: flex; flex-direction: column; gap: 10px; }
+.av-section-title {
+  font-family: var(--font-arcade); font-size: 0.32rem; color: var(--neon-purple);
+  letter-spacing: 1px; border-bottom: 1px solid rgba(180,74,255,0.3); padding-bottom: 6px;
+}
+
+.av-controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .av-control-group { display: flex; flex-direction: column; gap: 4px; }
 .av-control-group label { font-family: var(--font-arcade); font-size: 0.28rem; color: var(--text-muted); }
-.color-picker { display: flex; gap: 5px; }
-.color-swatch { width: 24px; height: 24px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; }
-.color-swatch.active { border-color: var(--text-bright); transform: scale(1.1); }
+.color-picker { display: flex; gap: 5px; flex-wrap: wrap; }
+.color-swatch { width: 24px; height: 24px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s; }
+.color-swatch.active { border-color: var(--text-bright); transform: scale(1.15); box-shadow: 0 0 6px rgba(255,255,255,0.4); }
 
-/* Tienda */
-#view-shop { display: flex; flex-direction: column; gap: 10px; max-height: 400px; }
+/* Grid de items equipados */
+.av-equipped-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.av-equipped-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-panel);
+  border-radius: var(--radius);
+  padding: 8px 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.av-equipped-item:hover {
+  border-color: var(--neon-purple);
+  background: rgba(180,74,255,0.1);
+}
+.av-equipped-item.active-slot {
+  border-color: var(--neon-purple);
+  box-shadow: 0 0 10px rgba(180,74,255,0.3);
+}
+.av-equipped-icon { font-size: 1.4rem; display: block; margin-bottom: 3px; }
+.av-equipped-label { font-family: var(--font-arcade); font-size: 0.22rem; color: var(--text-muted); display: block; }
+.av-equipped-cat { font-family: var(--font-arcade); font-size: 0.2rem; color: rgba(180,74,255,0.7); display: block; margin-top: 1px; }
+
+/* Tienda mejorada */
+#view-shop { display: flex; flex-direction: column; gap: 10px; max-height: 450px; }
 .shop-header { display: flex; justify-content: space-between; align-items: center; background: rgba(255,204,0,0.1); padding: 10px; border-radius: var(--radius); border: 1px solid rgba(255,204,0,0.3); }
-.shop-categories { overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-right: 5px; }
-.shop-cat-title { font-family: var(--font-arcade); font-size: 0.35rem; color: var(--neon-cyan); border-bottom: 1px solid var(--border-panel); padding-bottom: 5px; margin-bottom: 5px; text-align: left;}
-.shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.shop-item { background: var(--bg-card); border: 1px solid var(--border-panel); border-radius: var(--radius); padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.shop-item-icon { font-size: 1.8rem; }
-.shop-item-name { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-primary); text-align: center; }
-.shop-item-btn { background: rgba(0,229,255,0.1); border: 1px solid var(--neon-cyan); color: var(--neon-cyan); font-family: var(--font-arcade); font-size: 0.28rem; padding: 6px; border-radius: 4px; cursor: pointer; width: 100%; transition: var(--transition); }
+.shop-categories { overflow-y: auto; display: flex; flex-direction: column; gap: 18px; padding-right: 5px; }
+.shop-cat-title { font-family: var(--font-arcade); font-size: 0.35rem; color: var(--neon-cyan); border-bottom: 1px solid var(--border-panel); padding-bottom: 5px; margin-bottom: 8px; text-align: left;}
+.shop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+/* Tarjeta de item de tienda mejorada */
+.shop-item {
+  background: var(--bg-card); border: 1px solid var(--border-panel);
+  border-radius: var(--radius); padding: 10px 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  transition: all 0.15s; position: relative; overflow: hidden;
+}
+.shop-item:hover { border-color: rgba(0,229,255,0.4); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.shop-item.item-owned { border-color: rgba(0,255,136,0.3); background: rgba(0,255,136,0.05); }
+
+/* Preview del item (canvas pixel art o emoji grande) */
+.shop-item-preview {
+  width: 48px; height: 64px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.shop-item-preview canvas { image-rendering: pixelated; }
+.shop-item-preview .preview-emoji { font-size: 2.4rem; line-height: 1; }
+.shop-item-preview .preview-car-emoji { font-size: 2rem; line-height: 1; }
+
+.shop-item-name { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-primary); text-align: center; line-height: 1.2; }
+.shop-item-price { font-family: var(--font-arcade); font-size: 0.26rem; color: #ffcc00; }
+.shop-item-btn {
+  background: rgba(0,229,255,0.1); border: 1px solid var(--neon-cyan); color: var(--neon-cyan);
+  font-family: var(--font-arcade); font-size: 0.26rem; padding: 6px 4px;
+  border-radius: 4px; cursor: pointer; width: 100%; transition: var(--transition);
+}
 .shop-item-btn:hover:not(:disabled) { background: var(--neon-cyan); color: var(--bg-deep); }
 .shop-item-btn:disabled { border-color: var(--text-muted); color: var(--text-muted); background: transparent; cursor: not-allowed; }
-.shop-item-btn.owned { border-color: var(--neon-green); color: var(--neon-green); }
+.shop-item-btn.owned { border-color: var(--neon-green); color: var(--neon-green); background: rgba(0,255,136,0.08); }
+.shop-item-btn.equip-btn { border-color: var(--neon-purple); color: var(--neon-purple); background: rgba(180,74,255,0.1); }
+.shop-item-btn.equip-btn:hover { background: var(--neon-purple); color: white; }
+.shop-item-btn.equipped-btn { border-color: var(--neon-yellow); color: var(--neon-yellow); background: rgba(255,230,0,0.1); cursor: default; }
+
+/* Badge "NUEVO" en tienda */
+.shop-item-badge {
+  position: absolute; top: 4px; right: 4px;
+  font-family: var(--font-arcade); font-size: 0.2rem;
+  background: var(--neon-yellow); color: #000;
+  padding: 2px 4px; border-radius: 3px;
+}
 
 /* ═══════════════════════════════════════════════════════════
    UTILIDADES
@@ -441,10 +610,6 @@ body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,
 .exchange-val-row { display: flex; align-items: center; gap: 8px; }
 .exchange-val { font-family: var(--font-mono); font-size: 0.95rem; color: var(--neon-cyan); }
 .er-refresh { background: transparent; border: 1px solid var(--neon-cyan); color: var(--neon-cyan); border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; }
-.transfer-preview { flex-direction: column; gap: 6px; }
-.tp-arrow { text-align: center; color: var(--neon-cyan); font-size: 1.2rem; }
-.price-badge { font-family: var(--font-arcade); font-size: 0.3rem; }
-.game-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='%2300e5ff' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 10px; padding-right: 30px; cursor: pointer; }
 
 /* ═══════════════════════════════════════════════════════════
    RESPONSIVE — Móvil
@@ -455,5 +620,9 @@ body.market-us .ticker-chip-btn { color: var(--us-color); border-color: rgba(58,
   .logo-text { font-size: 0.55rem; }
   .badge-title { max-width: 60px; font-size: 0.26rem; }
   .btn-transfer, .btn-reset, .btn-avatar { font-size: 0.28rem; padding: 4px 6px; }
-  .avatar-controls { grid-template-columns: 1fr; }
+  .av-controls-grid { grid-template-columns: 1fr; }
+  .shop-grid { grid-template-columns: 1fr 1fr; }
+  .av-equipped-grid { grid-template-columns: repeat(3, 1fr); }
+  #avatar-canvas { width: 128px; height: 192px; }
+  .avatar-car-display { width: 120px; height: 70px; }
 }

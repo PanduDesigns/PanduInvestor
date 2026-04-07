@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
-   PANDU INVESTOR — script.js  (Gamificación XP + Tienda v3)
+   PANDU INVESTOR — script.js  (Gamificación XP + Tienda v4)
+   Motor Pixel Art 16-bit completo
    ═══════════════════════════════════════════════════════════════ */
 
 "use strict";
@@ -32,36 +33,703 @@ const YF_URL     = "https://query1.finance.yahoo.com/v8/finance/chart/";
 const YF_SEARCH  = "https://query1.finance.yahoo.com/v1/finance/search?q=";
 
 // ─────────────────────────────────────────────────────────────
+// MOTOR PIXEL ART 16-BIT
+// ─────────────────────────────────────────────────────────────
+// El personaje se dibuja sobre un canvas de 64x96 píxeles.
+// Luego se escala con CSS (image-rendering: pixelated).
+// Cada capa es una función que pinta directamente en el ctx.
+
+const PX = 1; // unidad pixel base
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return {r,g,b};
+}
+
+function darken(hex, amt=40) {
+  const {r,g,b} = hexToRgb(hex);
+  return `rgb(${Math.max(0,r-amt)},${Math.max(0,g-amt)},${Math.max(0,b-amt)})`;
+}
+
+function lighten(hex, amt=40) {
+  const {r,g,b} = hexToRgb(hex);
+  return `rgb(${Math.min(255,r+amt)},${Math.min(255,g+amt)},${Math.min(255,b+amt)})`;
+}
+
+/**
+ * Dibuja el personaje completo en el canvas dado.
+ * @param {HTMLCanvasElement} canvas
+ * @param {Object} av  - state.avatar
+ * @param {number} scale - escala de renderizado (1 = 64x96, 2 = 128x192...)
+ */
+function drawCharacter(canvas, av, scale = 1) {
+  const W = 64, H = 96;
+  canvas.width  = W * scale;
+  canvas.height = H * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.scale(scale, scale);
+  ctx.imageSmoothingEnabled = false;
+
+  const skin    = av.skin    || '#ffdbac';
+  const eyes    = av.eyes    || '#000000';
+  const hairCol = av.hairColor || '#000000';
+  const hairStyle = av.hairStyle || 'short';
+  const gender  = av.gender  || 'male';
+  const clothId = av.clothes || 'shirt_basic';
+  const accId   = av.accessory || 'none';
+
+  // Buscar datos de ropa actual
+  const clothItem = SHOP_ITEMS.clothes.find(c => c.id === clothId) || SHOP_ITEMS.clothes[0];
+
+  // ── PIERNAS (colores según pantalón) ──
+  const pantsCol = (clothItem.pantsColor || (gender === 'female' ? '#e8a0b0' : '#2a3a5c'));
+  const shoeCol  = (clothItem.shoeColor  || '#1a1a2e');
+  drawLegs(ctx, pantsCol, shoeCol, gender);
+
+  // ── CUERPO / ROPA ──
+  drawBody(ctx, clothItem, gender, skin);
+
+  // ── CABEZA ──
+  drawHead(ctx, skin, eyes);
+
+  // ── PELO ──
+  drawHair(ctx, hairStyle, hairCol, gender);
+
+  // ── ACCESORIO ──
+  const accItem = SHOP_ITEMS.accessories.find(a => a.id === accId);
+  if (accItem && accItem.id !== 'none') {
+    drawAccessory(ctx, accItem);
+  }
+}
+
+function drawLegs(ctx, pantsCol, shoeCol, gender) {
+  const W = 64;
+  // Muslos
+  ctx.fillStyle = pantsCol;
+  ctx.fillRect(20, 64, 10, 16);
+  ctx.fillRect(34, 64, 10, 16);
+  // Sombra interior pierna
+  ctx.fillStyle = darken(pantsCol, 20);
+  ctx.fillRect(29, 64, 5, 16);
+  // Zapatos
+  ctx.fillStyle = shoeCol;
+  ctx.fillRect(18, 80, 14, 8);
+  ctx.fillRect(32, 80, 14, 8);
+  // Brillo zapato
+  ctx.fillStyle = lighten(shoeCol, 30);
+  ctx.fillRect(19, 81, 4, 2);
+  ctx.fillRect(33, 81, 4, 2);
+}
+
+function drawBody(ctx, clothItem, gender, skin) {
+  const bodyCol = clothItem.color || '#5a7a9a';
+  const bodyDark = darken(bodyCol, 30);
+  const bodyLight = lighten(bodyCol, 30);
+
+  // Cuerpo principal
+  ctx.fillStyle = bodyCol;
+  ctx.fillRect(16, 44, 32, 22);
+
+  // Sombra lateral derecha
+  ctx.fillStyle = bodyDark;
+  ctx.fillRect(40, 44, 8, 22);
+
+  // Cuello (piel)
+  ctx.fillStyle = skin;
+  ctx.fillRect(28, 40, 8, 6);
+
+  // Decoración específica por tipo de ropa
+  if (clothItem.id === 'suit' || clothItem.id === 'suit_deluxe') {
+    // Corbata
+    ctx.fillStyle = '#cc0000';
+    ctx.fillRect(30, 44, 4, 14);
+    ctx.fillRect(29, 52, 6, 4);
+    // Solapas
+    ctx.fillStyle = bodyDark;
+    ctx.fillRect(16, 44, 6, 16);
+    ctx.fillRect(42, 44, 6, 16);
+    // Botones
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(31, 48, 2, 2);
+    ctx.fillRect(31, 53, 2, 2);
+
+  } else if (clothItem.id === 'hoodie') {
+    // Canguro
+    ctx.fillStyle = bodyLight;
+    ctx.fillRect(22, 54, 12, 10); // bolsillo
+    ctx.fillStyle = bodyDark;
+    ctx.fillRect(22, 54, 12, 1);  // borde bolsillo
+    // Cordones capucha
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(29, 44, 2, 8);
+    ctx.fillRect(33, 44, 2, 8);
+
+  } else if (clothItem.id === 'king') {
+    // Manto real con ornamentos dorados
+    ctx.fillStyle = '#8B0000';
+    ctx.fillRect(12, 42, 40, 26);
+    ctx.fillStyle = '#FFD700';
+    // Borde dorado top
+    ctx.fillRect(12, 42, 40, 3);
+    // Motivos
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(14 + i*10, 48, 4, 4);
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(16, 46, 2, 2);
+    ctx.fillRect(28, 46, 2, 2);
+    ctx.fillRect(40, 46, 2, 2);
+
+  } else if (clothItem.id === 'astronaut') {
+    // Traje espacial
+    ctx.fillStyle = '#d0d8e8';
+    ctx.fillRect(12, 40, 40, 26);
+    ctx.fillStyle = '#aab8cc';
+    ctx.fillRect(12, 40, 6, 26);
+    ctx.fillRect(46, 40, 6, 26);
+    // Visor / placa pecho
+    ctx.fillStyle = '#00aaff';
+    ctx.fillRect(24, 48, 16, 10);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillRect(25, 49, 5, 3);
+    // Brazos
+    ctx.fillStyle = '#d0d8e8';
+    ctx.fillRect(6, 44, 8, 18);
+    ctx.fillRect(50, 44, 8, 18);
+
+  } else if (clothItem.id === 'ninja') {
+    // Traje ninja
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(12, 40, 40, 28);
+    ctx.fillStyle = '#222222';
+    ctx.fillRect(12, 40, 6, 28);
+    ctx.fillRect(46, 40, 6, 28);
+    // Faja
+    ctx.fillStyle = '#cc0000';
+    ctx.fillRect(12, 56, 40, 4);
+    // Brazos
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(6, 44, 8, 18);
+    ctx.fillRect(50, 44, 8, 18);
+
+  } else {
+    // Camiseta básica / default — brazos con piel
+    ctx.fillStyle = skin;
+    ctx.fillRect(6, 44, 10, 16);
+    ctx.fillRect(48, 44, 10, 16);
+    // Sombra brazo
+    ctx.fillStyle = darken(skin, 20);
+    ctx.fillRect(6, 52, 10, 8);
+    ctx.fillRect(48, 52, 10, 8);
+    // Mangas de camiseta
+    ctx.fillStyle = bodyCol;
+    ctx.fillRect(6, 44, 10, 6);
+    ctx.fillRect(48, 44, 10, 6);
+  }
+
+  // Línea de luz en el hombro
+  ctx.fillStyle = bodyLight;
+  ctx.fillRect(16, 44, 24, 2);
+}
+
+function drawHead(ctx, skin, eyeCol) {
+  const W = 64;
+  const headX = 20, headY = 16, headW = 24, headH = 24;
+
+  // Cabeza
+  ctx.fillStyle = skin;
+  ctx.fillRect(headX, headY, headW, headH);
+
+  // Sombra inferior de cabeza
+  ctx.fillStyle = darken(skin, 15);
+  ctx.fillRect(headX, headY + headH - 4, headW, 4);
+
+  // Mejillas
+  ctx.fillStyle = `rgba(220,130,100,0.3)`;
+  ctx.fillRect(headX + 1, headY + 14, 4, 4);
+  ctx.fillRect(headX + headW - 5, headY + 14, 4, 4);
+
+  // Ojos
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(headX + 4, headY + 8, 7, 7);
+  ctx.fillRect(headX + 13, headY + 8, 7, 7);
+  ctx.fillStyle = eyeCol;
+  ctx.fillRect(headX + 5, headY + 9, 5, 5);
+  ctx.fillRect(headX + 14, headY + 9, 5, 5);
+  // Pupila
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(headX + 7, headY + 11, 2, 2);
+  ctx.fillRect(headX + 16, headY + 11, 2, 2);
+  // Brillo ojo
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(headX + 6, headY + 10, 1, 1);
+  ctx.fillRect(headX + 15, headY + 10, 1, 1);
+
+  // Nariz
+  ctx.fillStyle = darken(skin, 25);
+  ctx.fillRect(headX + 11, headY + 15, 2, 2);
+
+  // Boca / sonrisa
+  ctx.fillStyle = darken(skin, 35);
+  ctx.fillRect(headX + 7, headY + 19, 10, 2);
+  ctx.fillRect(headX + 6, headY + 18, 2, 2);
+  ctx.fillRect(headX + 16, headY + 18, 2, 2);
+}
+
+function drawHair(ctx, style, hairCol, gender) {
+  if (style === 'none') return;
+
+  const hairDark = darken(hairCol, 30);
+  const hairLight = lighten(hairCol, 20);
+
+  if (style === 'short') {
+    // Pelo corto
+    ctx.fillStyle = hairCol;
+    ctx.fillRect(19, 12, 26, 8);
+    ctx.fillRect(17, 14, 4, 12);
+    ctx.fillRect(43, 14, 4, 12);
+    ctx.fillStyle = hairDark;
+    ctx.fillRect(19, 18, 26, 2);
+    ctx.fillStyle = hairLight;
+    ctx.fillRect(22, 12, 10, 3);
+
+  } else if (style === 'long') {
+    // Pelo largo (cae por los lados)
+    ctx.fillStyle = hairCol;
+    ctx.fillRect(16, 12, 32, 10);
+    // Caída lateral
+    ctx.fillRect(13, 14, 6, 36);
+    ctx.fillRect(45, 14, 6, 36);
+    // Mechones
+    ctx.fillStyle = hairDark;
+    ctx.fillRect(13, 36, 3, 14);
+    ctx.fillRect(48, 36, 3, 14);
+    ctx.fillRect(16, 20, 32, 2);
+    ctx.fillStyle = hairLight;
+    ctx.fillRect(20, 12, 14, 3);
+    // Flequillo
+    ctx.fillStyle = hairCol;
+    ctx.fillRect(20, 16, 24, 4);
+
+  } else if (style === 'spiky') {
+    // Pinchos hacia arriba
+    ctx.fillStyle = hairCol;
+    // Base
+    ctx.fillRect(19, 14, 26, 6);
+    ctx.fillRect(17, 14, 4, 10);
+    ctx.fillRect(43, 14, 4, 10);
+    // Pinchos
+    ctx.fillRect(21, 6, 4, 10);
+    ctx.fillRect(28, 4, 4, 12);
+    ctx.fillRect(35, 6, 4, 10);
+    ctx.fillStyle = hairLight;
+    ctx.fillRect(22, 6, 2, 5);
+    ctx.fillRect(29, 4, 2, 5);
+    ctx.fillRect(36, 6, 2, 5);
+
+  } else if (style === 'afro') {
+    // Afro circular
+    ctx.fillStyle = hairCol;
+    // Gran masa de pelo
+    ctx.fillRect(12, 8, 40, 24);
+    ctx.fillRect(10, 14, 44, 14);
+    ctx.fillRect(14, 6, 36, 6);
+    ctx.fillStyle = hairDark;
+    // Textura rizada
+    for (let i = 0; i < 5; i++) {
+      ctx.fillRect(12 + i*8, 10, 4, 4);
+      ctx.fillRect(16 + i*8, 16, 4, 4);
+    }
+    ctx.fillStyle = hairLight;
+    ctx.fillRect(22, 8, 8, 3);
+  }
+}
+
+function drawAccessory(ctx, accItem) {
+  if (!accItem || accItem.id === 'none') return;
+
+  if (accItem.id === 'glasses' || accItem.id === 'reading_glasses') {
+    // Gafas de lectura
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(21, 23, 7, 5);
+    ctx.fillRect(36, 23, 7, 5);
+    ctx.fillRect(28, 24, 8, 2);
+    ctx.fillStyle = 'rgba(200,230,255,0.5)';
+    ctx.fillRect(22, 24, 5, 3);
+    ctx.fillRect(37, 24, 5, 3);
+
+  } else if (accItem.id === 'sunglasses') {
+    // Gafas de sol
+    ctx.fillStyle = '#111';
+    ctx.fillRect(20, 22, 9, 7);
+    ctx.fillRect(35, 22, 9, 7);
+    ctx.fillRect(29, 23, 6, 3);
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(21, 23, 7, 5);
+    ctx.fillRect(36, 23, 7, 5);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(21, 23, 3, 2);
+    ctx.fillRect(36, 23, 3, 2);
+
+  } else if (accItem.id === 'chain') {
+    // Cadena de oro al cuello
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(24, 44, 16, 2);
+    ctx.fillRect(22, 46, 20, 2);
+    ctx.fillRect(28, 48, 8, 4);
+    ctx.fillStyle = '#FFA500';
+    ctx.fillRect(29, 49, 6, 2);
+    ctx.fillStyle = '#fff8c0';
+    ctx.fillRect(26, 45, 2, 1);
+
+  } else if (accItem.id === 'crown') {
+    // Corona encima del pelo
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(20, 8, 24, 6);
+    // Puntas de corona
+    ctx.fillRect(20, 4, 4, 6);
+    ctx.fillRect(28, 2, 4, 8);
+    ctx.fillRect(36, 4, 4, 6);
+    ctx.fillStyle = '#FFA500';
+    ctx.fillRect(20, 12, 24, 2);
+    // Joyas
+    ctx.fillStyle = '#ff3a5c';
+    ctx.fillRect(21, 6, 2, 2);
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillRect(29, 4, 2, 2);
+    ctx.fillStyle = '#ff3a5c';
+    ctx.fillRect(37, 6, 2, 2);
+    ctx.fillStyle = '#fff8c0';
+    ctx.fillRect(22, 9, 4, 2);
+    ctx.fillRect(30, 9, 4, 2);
+    ctx.fillRect(38, 9, 4, 2);
+
+  } else if (accItem.id === 'top_hat') {
+    // Sombrero de copa
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(18, 2, 28, 14);
+    ctx.fillRect(14, 14, 36, 4);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(19, 2, 26, 2);
+    ctx.fillStyle = '#f0d000';
+    ctx.fillRect(18, 12, 28, 2);
+
+  } else if (accItem.id === 'monocle') {
+    // Monóculo
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = 'rgba(200,230,255,0.3)';
+    ctx.fillRect(35, 22, 9, 9);
+    ctx.strokeRect(35, 22, 9, 9);
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(44, 22, 2, 1);
+    ctx.fillRect(44, 30, 2, 6);
+  }
+}
+
+/**
+ * Dibuja el coche en el canvas dado.
+ * @param {HTMLCanvasElement} canvas
+ * @param {string} carId - ID del coche
+ */
+function drawCar(canvas, carId) {
+  canvas.width  = 120;
+  canvas.height = 70;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, 120, 70);
+
+  if (!carId || carId === 'none') return;
+
+  const carDef = SHOP_ITEMS.cars.find(c => c.id === carId);
+  if (!carDef) return;
+
+  drawCarPixelArt(ctx, carDef);
+}
+
+function drawCarPixelArt(ctx, carDef) {
+  const col   = carDef.bodyColor || '#cc0000';
+  const dark  = darken(col, 40);
+  const light = lighten(col, 40);
+  const type  = carDef.carType || 'sedan';
+
+  if (type === 'sedan') {
+    // Carrocería principal
+    ctx.fillStyle = col;
+    ctx.fillRect(6, 30, 108, 26);
+    // Techo
+    ctx.fillStyle = col;
+    ctx.fillRect(26, 14, 68, 18);
+    ctx.fillStyle = dark;
+    ctx.fillRect(26, 14, 68, 3);
+    // Ventanas
+    ctx.fillStyle = '#a0d8ef';
+    ctx.fillRect(30, 18, 28, 12);
+    ctx.fillRect(62, 18, 28, 12);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(31, 19, 8, 4);
+    ctx.fillRect(63, 19, 8, 4);
+    // Pilares
+    ctx.fillStyle = dark;
+    ctx.fillRect(58, 18, 4, 12);
+    // Maletero y capó
+    ctx.fillStyle = light;
+    ctx.fillRect(6, 30, 20, 4);
+    ctx.fillRect(94, 30, 20, 4);
+    // Ruedas
+    drawWheel(ctx, 26, 54, carDef.wheelColor);
+    drawWheel(ctx, 88, 54, carDef.wheelColor);
+    // Faros
+    ctx.fillStyle = '#ffffc0';
+    ctx.fillRect(6, 36, 10, 6);
+    ctx.fillRect(104, 36, 10, 6);
+    ctx.fillStyle = '#ff4444';
+    ctx.fillRect(6, 44, 8, 4);
+    ctx.fillRect(106, 44, 8, 4);
+    // Sombra bajo coche
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(16, 58, 88, 6);
+
+  } else if (type === 'sports') {
+    // Deportivo bajo y aerodinámico
+    ctx.fillStyle = col;
+    ctx.fillRect(4, 34, 112, 20);
+    // Techo bajo inclinado
+    ctx.fillStyle = col;
+    ctx.fillRect(32, 20, 56, 16);
+    ctx.fillStyle = dark;
+    ctx.fillRect(32, 20, 56, 2);
+    // Alerón trasero
+    ctx.fillStyle = dark;
+    ctx.fillRect(4, 30, 16, 4);
+    ctx.fillRect(4, 28, 4, 6);
+    // Ventanas
+    ctx.fillStyle = '#7ec8e3';
+    ctx.fillRect(36, 22, 48, 12);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillRect(37, 23, 12, 4);
+    // Entrada de aire
+    ctx.fillStyle = dark;
+    ctx.fillRect(10, 38, 16, 6);
+    ctx.fillRect(100, 38, 10, 6);
+    // Falda lateral
+    ctx.fillStyle = dark;
+    ctx.fillRect(4, 48, 112, 6);
+    // Ruedas deportivas
+    drawSportsWheel(ctx, 26, 54, carDef.wheelColor);
+    drawSportsWheel(ctx, 90, 54, carDef.wheelColor);
+    // Faros LED
+    ctx.fillStyle = '#e0e0ff';
+    ctx.fillRect(4, 36, 14, 4);
+    ctx.fillRect(102, 36, 14, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillRect(5, 37, 4, 2);
+    // Escape
+    ctx.fillStyle = '#888';
+    ctx.fillRect(4, 52, 6, 3);
+    ctx.fillRect(12, 52, 6, 3);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(16, 58, 88, 6);
+
+  } else if (type === 'suv') {
+    // SUV alto y robusto
+    ctx.fillStyle = col;
+    ctx.fillRect(4, 22, 112, 32);
+    // Techo plano grande
+    ctx.fillStyle = light;
+    ctx.fillRect(4, 22, 112, 4);
+    // Parabrisas grande
+    ctx.fillStyle = '#a0d8ef';
+    ctx.fillRect(24, 24, 40, 18);
+    ctx.fillRect(70, 24, 40, 18);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(25, 25, 12, 6);
+    ctx.fillRect(71, 25, 12, 6);
+    // Pilares gruesos
+    ctx.fillStyle = dark;
+    ctx.fillRect(20, 22, 6, 22);
+    ctx.fillRect(64, 22, 6, 22);
+    ctx.fillRect(110, 22, 6, 22);
+    // Estribos
+    ctx.fillStyle = dark;
+    ctx.fillRect(4, 52, 112, 4);
+    // Ruedas grandes
+    drawBigWheel(ctx, 28, 56, carDef.wheelColor);
+    drawBigWheel(ctx, 88, 56, carDef.wheelColor);
+    // Parachoques
+    ctx.fillStyle = dark;
+    ctx.fillRect(4, 22, 112, 4);
+    ctx.fillRect(4, 50, 112, 4);
+    ctx.fillStyle = '#ffffc0';
+    ctx.fillRect(4, 34, 14, 8);
+    ctx.fillRect(102, 34, 14, 8);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(16, 60, 88, 6);
+
+  } else if (type === 'hypercar') {
+    // Hypercar futurista
+    ctx.fillStyle = col;
+    ctx.fillRect(8, 38, 104, 16);
+    // Carrocería aerodinámica muy baja
+    ctx.fillStyle = col;
+    ctx.fillRect(20, 28, 80, 12);
+    // Cabina de cristal
+    ctx.fillStyle = '#5dc8e8';
+    ctx.fillRect(38, 20, 44, 12);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillRect(40, 21, 12, 4);
+    // Alerón trasero grande
+    ctx.fillStyle = dark;
+    ctx.fillRect(8, 24, 18, 6);
+    ctx.fillRect(8, 20, 6, 10);
+    ctx.fillRect(14, 18, 6, 6);
+    // Difusor delantero
+    ctx.fillStyle = dark;
+    ctx.fillRect(94, 36, 18, 8);
+    // Bandas de carbono
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    for (let i = 0; i < 6; i++) {
+      ctx.fillRect(20 + i*16, 30, 8, 10);
+    }
+    // Tiras LED
+    ctx.fillStyle = '#00ffff';
+    ctx.fillRect(8, 38, 104, 2);
+    // Ruedas con llanta estrella
+    drawHyperWheel(ctx, 26, 54, carDef.wheelColor);
+    drawHyperWheel(ctx, 90, 54, carDef.wheelColor);
+    // Faros de tira
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(8, 40, 14, 2);
+    ctx.fillRect(98, 40, 14, 2);
+    // Escapes cuádruples
+    ctx.fillStyle = '#888';
+    ctx.fillRect(8, 52, 5, 3);
+    ctx.fillRect(14, 52, 5, 3);
+    ctx.fillStyle = 'rgba(255,150,0,0.3)';
+    ctx.fillRect(9, 54, 3, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(16, 58, 88, 6);
+  }
+}
+
+function drawWheel(ctx, cx, cy, col = '#222') {
+  const r = 12;
+  ctx.fillStyle = '#111';
+  ctx.fillRect(cx - r, cy - r, r*2, r*2);
+  ctx.fillStyle = col || '#888';
+  ctx.fillRect(cx - r + 3, cy - r + 3, (r-3)*2, (r-3)*2);
+  ctx.fillStyle = '#444';
+  ctx.fillRect(cx - 4, cy - r + 3, 8, (r-3)*2);
+  ctx.fillRect(cx - r + 3, cy - 4, (r-3)*2, 8);
+  ctx.fillStyle = '#aaa';
+  ctx.fillRect(cx - 3, cy - 3, 6, 6);
+}
+
+function drawSportsWheel(ctx, cx, cy, col = '#888') {
+  const r = 11;
+  ctx.fillStyle = '#111';
+  ctx.fillRect(cx - r, cy - r, r*2, r*2);
+  ctx.fillStyle = col || '#aaa';
+  // Rayos de estrella
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2;
+    const x1 = cx + Math.cos(angle) * 3;
+    const y1 = cy + Math.sin(angle) * 3;
+    const x2 = cx + Math.cos(angle) * (r - 2);
+    const y2 = cy + Math.sin(angle) * (r - 2);
+    ctx.fillStyle = col || '#aaa';
+    ctx.fillRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1)+2, Math.abs(y2-y1)+2);
+  }
+  ctx.fillStyle = '#cccccc';
+  ctx.fillRect(cx - 3, cy - 3, 6, 6);
+}
+
+function drawBigWheel(ctx, cx, cy, col = '#555') {
+  const r = 14;
+  ctx.fillStyle = '#111';
+  ctx.fillRect(cx - r, cy - r, r*2, r*2);
+  ctx.fillStyle = col || '#888';
+  ctx.fillRect(cx - r + 3, cy - r + 3, (r-3)*2, (r-3)*2);
+  ctx.fillStyle = '#333';
+  for (let i = 0; i < 4; i++) {
+    ctx.fillRect(cx - r + 5, cy - 2 + i * 4 - 6, (r-5)*2, 2);
+    ctx.fillRect(cx - 2 + i * 4 - 6, cy - r + 5, 2, (r-5)*2);
+  }
+  ctx.fillStyle = '#aaa';
+  ctx.fillRect(cx - 4, cy - 4, 8, 8);
+}
+
+function drawHyperWheel(ctx, cx, cy, col = '#ccc') {
+  const r = 12;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(cx - r, cy - r, r*2, r*2);
+  const rays = 6;
+  for (let i = 0; i < rays; i++) {
+    const angle = (i / rays) * Math.PI * 2;
+    const ax = cx + Math.cos(angle) * 2;
+    const ay = cy + Math.sin(angle) * 2;
+    const bx = cx + Math.cos(angle) * (r - 1);
+    const by = cy + Math.sin(angle) * (r - 1);
+    ctx.fillStyle = col || '#ccc';
+    ctx.fillRect(Math.min(ax,bx), Math.min(ay,by), Math.abs(bx-ax)+2, Math.abs(by-ay)+2);
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(cx - 3, cy - 3, 6, 6);
+  ctx.fillStyle = '#00ffff';
+  ctx.fillRect(cx - 1, cy - 1, 2, 2);
+}
+
+// ─────────────────────────────────────────────────────────────
 // DATOS TIENDA Y AVATAR
 // ─────────────────────────────────────────────────────────────
 
 const SHOP_ITEMS = {
   clothes: [
-    { id: 'shirt_basic', name: 'Camiseta Básica', price: 0, icon: '👕', color: '#5a7a9a' },
-    { id: 'suit', name: 'Traje Wall St.', price: 100, icon: '👔', color: '#1a1a1a' },
-    { id: 'hoodie', name: 'Sudadera Cripto', price: 250, icon: '🧥', color: '#b44aff' },
-    { id: 'king', name: 'Manto Real', price: 1000, icon: '👘', color: '#ffcc00' }
+    { id: 'shirt_basic',  name: 'Camiseta Básica', price: 0,    color: '#5a7a9a', pantsColor: '#2a3a5c', shoeColor: '#1a1a2e', icon: '👕' },
+    { id: 'suit',         name: 'Traje Wall St.',  price: 100,  color: '#1a1a2e', pantsColor: '#111124', shoeColor: '#0a0a14', icon: '👔' },
+    { id: 'suit_deluxe',  name: 'Traje de Lujo',   price: 500,  color: '#2a0060', pantsColor: '#1a0040', shoeColor: '#0a0020', icon: '🤵' },
+    { id: 'hoodie',       name: 'Sudadera Cripto',  price: 250,  color: '#b44aff', pantsColor: '#2a1050', shoeColor: '#0f0825', icon: '🧥' },
+    { id: 'astronaut',    name: 'Traje Espacial',   price: 2000, color: '#d0d8e8', pantsColor: '#d0d8e8', shoeColor: '#606878', icon: '👨‍🚀' },
+    { id: 'ninja',        name: 'Traje Ninja',      price: 3000, color: '#111111', pantsColor: '#0a0a0a', shoeColor: '#050505', icon: '🥷' },
+    { id: 'king',         name: 'Manto Real',       price: 1000, color: '#8B0000', pantsColor: '#5c0000', shoeColor: '#2a0000', icon: '👘' }
   ],
   accessories: [
-    { id: 'none', name: 'Ninguno', price: 0, icon: '' },
-    { id: 'glasses', name: 'Gafas Lectura', price: 50, icon: '👓' },
-    { id: 'sunglasses', name: 'Gafas Sol', price: 150, icon: '🕶️' },
-    { id: 'chain', name: 'Cadena Oro', price: 500, icon: '⛓️' },
-    { id: 'crown', name: 'Corona', price: 2000, icon: '👑' }
+    { id: 'none',          name: 'Ninguno',           price: 0,    icon: '—' },
+    { id: 'glasses',       name: 'Gafas Lectura',     price: 50,   icon: '👓' },
+    { id: 'sunglasses',    name: 'Gafas de Sol',       price: 150,  icon: '🕶️' },
+    { id: 'chain',         name: 'Cadena de Oro',      price: 500,  icon: '⛓️' },
+    { id: 'crown',         name: 'Corona Real',        price: 2000, icon: '👑' },
+    { id: 'top_hat',       name: 'Sombrero de Copa',   price: 800,  icon: '🎩' },
+    { id: 'monocle',       name: 'Monóculo de Oro',    price: 1200, icon: '🧐' }
   ],
   pets: [
-    { id: 'none', name: 'Ninguna', price: 0, icon: '' },
-    { id: 'dog', name: 'Perro', price: 300, icon: '🐕' },
-    { id: 'cat', name: 'Gato', price: 300, icon: '🐈' },
-    { id: 'monkey', name: 'Mono NFT', price: 800, icon: '🐒' },
-    { id: 'dragon', name: 'Dragón', price: 5000, icon: '🐉' }
+    { id: 'none',    name: 'Ninguna',    price: 0,    icon: '' },
+    { id: 'dog',     name: 'Perro',      price: 300,  icon: '🐕' },
+    { id: 'cat',     name: 'Gato',       price: 300,  icon: '🐈' },
+    { id: 'monkey',  name: 'Mono NFT',   price: 800,  icon: '🐒' },
+    { id: 'fox',     name: 'Zorro',      price: 600,  icon: '🦊' },
+    { id: 'dragon',  name: 'Dragón',     price: 5000, icon: '🐉' },
+    { id: 'robot',   name: 'Robot IA',   price: 4000, icon: '🤖' }
+  ],
+  cars: [
+    { id: 'none',       name: 'Sin coche',          price: 0,     carType: 'none',     bodyColor: '#000',    wheelColor: '#222', icon: '—' },
+    { id: 'old_car',    name: 'Fiat Rojo',           price: 200,   carType: 'sedan',    bodyColor: '#cc3333', wheelColor: '#444', icon: '🚗' },
+    { id: 'golf',       name: 'Hatchback Azul',      price: 500,   carType: 'sedan',    bodyColor: '#2255cc', wheelColor: '#555', icon: '🚙' },
+    { id: 'bmw',        name: 'Berlina Premium',     price: 1500,  carType: 'sedan',    bodyColor: '#223355', wheelColor: '#888', icon: '🚘' },
+    { id: 'suv',        name: 'SUV Todo Terreno',    price: 2500,  carType: 'suv',      bodyColor: '#334422', wheelColor: '#666', icon: '🚐' },
+    { id: 'ferrari',    name: 'Deportivo Rojo',      price: 5000,  carType: 'sports',   bodyColor: '#cc1111', wheelColor: '#aaa', icon: '🏎️' },
+    { id: 'lambo',      name: 'Deportivo Amarillo',  price: 8000,  carType: 'sports',   bodyColor: '#ccaa00', wheelColor: '#ccc', icon: '🏎️' },
+    { id: 'hypercar',   name: 'Hypercar Cripto',     price: 20000, carType: 'hypercar', bodyColor: '#00aaff', wheelColor: '#fff', icon: '🚀' }
   ]
 };
 
 const PALETTES = {
   skin: ['#ffdbac', '#f1c27d', '#e0ac69', '#8d5524', '#3d2c23'],
-  eyes: ['#000000', '#2e536f', '#3d671d', '#5c3a21'],
-  hair: ['#000000', '#4a3123', '#e6cea8', '#b55239', '#ff3a5c']
+  eyes: ['#000000', '#2e536f', '#3d671d', '#5c3a21', '#8b2525'],
+  hair: ['#000000', '#4a3123', '#e6cea8', '#b55239', '#ff3a5c', '#00aaff', '#7b2d8b']
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -187,8 +855,15 @@ let state = {
   stats: { ops: 0, buys: 0, sells: 0, opsEs: 0, opsUs: 0, plEs: 0, plUs: 0, best: null, worst: null },
   exchangeRate: 1.08, transferDir: "ES_TO_US", xp: 0, activeTitle: null, unlockedTitles: [],
   panducoins: 0,
-  avatar: { gender: 'male', skin: '#ffdbac', eyes: '#000000', hairStyle: 'short', hairColor: '#000000', clothes: 'shirt_basic', accessory: 'none', pet: 'none' },
-  inventory: { clothes: ['shirt_basic'], accessories: ['none'], pets: ['none'] }
+  avatar: {
+    gender: 'male', skin: '#ffdbac', eyes: '#000000',
+    hairStyle: 'short', hairColor: '#000000',
+    clothes: 'shirt_basic', accessory: 'none', pet: 'none', car: 'none'
+  },
+  inventory: {
+    clothes: ['shirt_basic'], accessories: ['none'],
+    pets: ['none'], cars: ['none']
+  }
 };
 
 let currentChartData = []; let currentChartTicker = ""; let chartZoom = 1; let chartPanX = 0;
@@ -201,6 +876,8 @@ window.addEventListener("load", () => {
   loadFromLS(); updateUI(); renderTickerChips(); setupChartInteractions();
   updateXPBar(); checkDailyLogin(); updatePanducoinsUI();
   setInterval(refreshPortfolio, 30000); refreshPortfolio();
+  // Dibujar mini avatar en cabecera tras carga
+  refreshHeaderAvatar();
 });
 
 function checkDailyLogin() {
@@ -227,10 +904,18 @@ function loadFromLS() {
   state.panducoins = parseInt(localStorage.getItem(LS_KEYS.panducoins)) || 0;
   
   const savedAvatar = JSON.parse(localStorage.getItem(LS_KEYS.avatar));
-  if(savedAvatar) state.avatar = { ...state.avatar, ...savedAvatar };
+  if (savedAvatar) state.avatar = { ...state.avatar, ...savedAvatar };
   
   const savedInv = JSON.parse(localStorage.getItem(LS_KEYS.inventory));
-  if(savedInv) state.inventory = { ...state.inventory, ...savedInv };
+  if (savedInv) {
+    state.inventory = { ...state.inventory, ...savedInv };
+    // Compatibilidad: asegurarse de que la categoría "cars" existe
+    if (!state.inventory.cars) state.inventory.cars = ['none'];
+    if (!Array.isArray(state.inventory.cars)) state.inventory.cars = ['none'];
+  }
+
+  // Compatibilidad: si no tiene car en avatar
+  if (!state.avatar.car) state.avatar.car = 'none';
 
   const unlocked = getUnlockedLevels(state.xp);
   state.unlockedTitles = unlocked.map(l => l.level);
@@ -305,7 +990,7 @@ function updateXPBar() {
   const bar = document.getElementById("xp-bar");
   const label = document.getElementById("xp-label");
   if (bar) bar.style.width = ld.pct + "%";
-  const activeLevelData = LEVELS.find(l => l.level === (state.activeTitle || ld.current.level)) || ld.current;
+  const activeLevelData = LEVELS.find(l => l.level === (state.activeTitle ? parseInt(state.activeTitle) : ld.current.level)) || ld.current;
   if (label) label.textContent = `NIV.${ld.current.level} — ${state.xp} XP`;
 
   const badgeEl = document.getElementById("header-player-badge");
@@ -313,6 +998,16 @@ function updateXPBar() {
   badgeEl.innerHTML = `<span class="badge-icon" style="color:${activeLevelData.color}">${activeLevelData.icon}</span><span class="badge-title" style="color:${activeLevelData.color}">${activeLevelData.title}</span>`;
   badgeEl.style.borderColor = activeLevelData.color + "55";
   badgeEl.style.background = activeLevelData.color + "11";
+}
+
+// ─────────────────────────────────────────────────────────────
+// MINI AVATAR EN CABECERA
+// ─────────────────────────────────────────────────────────────
+
+function refreshHeaderAvatar() {
+  const canvas = document.getElementById("header-avatar-canvas");
+  if (!canvas) return;
+  drawCharacter(canvas, state.avatar, 1);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -332,47 +1027,75 @@ function switchAvatarTab(tab) {
   document.getElementById("view-shop").classList.toggle("hidden", tab !== 'shop');
 
   if(tab === 'avatar') { renderAvatarEditor(); renderAvatarVisual(); }
-  if(tab === 'shop') renderShopItems();
+  if(tab === 'shop')   { renderShopItems(); updatePanducoinsUI(); }
 }
 
 function renderAvatarVisual() {
-  const char = document.getElementById("px-character");
-  const rootStyle = char.style;
-  const av = state.avatar;
+  // Canvas principal en modal
+  const mainCanvas = document.getElementById("avatar-canvas");
+  if (mainCanvas) drawCharacter(mainCanvas, state.avatar, 1);
 
-  rootStyle.setProperty('--av-skin', av.skin);
-  rootStyle.setProperty('--av-eyes', av.eyes);
-  rootStyle.setProperty('--av-hair', av.hairColor);
-  
-  const clothItem = SHOP_ITEMS.clothes.find(c => c.id === av.clothes) || SHOP_ITEMS.clothes[0];
-  rootStyle.setProperty('--av-clothes', clothItem.color);
-  document.getElementById("px-body").textContent = clothItem.icon;
+  // Coche
+  const carCanvas = document.getElementById("car-canvas");
+  if (carCanvas) drawCar(carCanvas, state.avatar.car);
 
-  const hair = document.getElementById("px-hair");
-  hair.className = `px-hair style-${av.hairStyle}`;
+  // Mascota
+  const petDisplay = document.getElementById("avatar-pet-display");
+  if (petDisplay) {
+    const petItem = SHOP_ITEMS.pets.find(p => p.id === state.avatar.pet);
+    petDisplay.textContent = (petItem && petItem.id !== 'none') ? petItem.icon : '';
+  }
 
-  const accItem = SHOP_ITEMS.accessories.find(a => a.id === av.accessory);
-  document.getElementById("px-acc").textContent = accItem ? accItem.icon : "";
+  // Mini avatar en cabecera
+  refreshHeaderAvatar();
 
-  const petItem = SHOP_ITEMS.pets.find(p => p.id === av.pet);
-  document.getElementById("px-pet").textContent = petItem ? petItem.icon : "";
+  // Avatar en modal rewards (si está abierto)
+  const rewardsCanvas = document.getElementById("rewards-avatar-canvas");
+  if (rewardsCanvas && !document.getElementById("modal-rewards").classList.contains("hidden")) {
+    drawCharacter(rewardsCanvas, state.avatar, 1);
+  }
+
+  // Items equipados
+  renderEquippedGrid();
+}
+
+function renderEquippedGrid() {
+  const grid = document.getElementById("av-equipped-grid");
+  if (!grid) return;
+
+  const clothItem = SHOP_ITEMS.clothes.find(c => c.id === state.avatar.clothes) || SHOP_ITEMS.clothes[0];
+  const accItem   = SHOP_ITEMS.accessories.find(a => a.id === state.avatar.accessory) || { name: 'Ninguno', icon: '—' };
+  const petItem   = SHOP_ITEMS.pets.find(p => p.id === state.avatar.pet) || { name: 'Ninguna', icon: '' };
+  const carItem   = SHOP_ITEMS.cars.find(c => c.id === state.avatar.car) || SHOP_ITEMS.cars[0];
+
+  const slots = [
+    { cat: 'clothes',     label: 'ROPA',      icon: clothItem.icon,    name: clothItem.name },
+    { cat: 'accessories', label: 'ACCESORIO',  icon: accItem.icon || '—', name: accItem.name },
+    { cat: 'pets',        label: 'MASCOTA',    icon: petItem.icon || '—', name: petItem.name },
+    { cat: 'cars',        label: 'COCHE',      icon: carItem.icon || '—', name: carItem.name }
+  ];
+
+  grid.innerHTML = slots.map(s => `
+    <div class="av-equipped-item active-slot">
+      <span class="av-equipped-icon">${s.icon}</span>
+      <span class="av-equipped-label">${s.name}</span>
+      <span class="av-equipped-cat">${s.label}</span>
+    </div>
+  `).join('');
 }
 
 function renderAvatarEditor() {
-  document.getElementById("av-gender").value = state.avatar.gender;
+  document.getElementById("av-gender").value    = state.avatar.gender;
   document.getElementById("av-hair-style").value = state.avatar.hairStyle;
 
   renderColorPickers('skin', PALETTES.skin);
   renderColorPickers('eyes', PALETTES.eyes);
   renderColorPickers('hair', PALETTES.hair);
-
-  populateInvSelect('clothes', 'inv-clothes');
-  populateInvSelect('accessories', 'inv-accessories');
-  populateInvSelect('pets', 'inv-pets');
 }
 
 function renderColorPickers(type, colors) {
   const container = document.getElementById(`picker-${type}`);
+  if (!container) return;
   container.innerHTML = "";
   const prop = type === 'hair' ? 'hairColor' : type;
   
@@ -391,36 +1114,8 @@ function renderColorPickers(type, colors) {
 }
 
 function updateAvatarBase() {
-  state.avatar.gender = document.getElementById("av-gender").value;
+  state.avatar.gender    = document.getElementById("av-gender").value;
   state.avatar.hairStyle = document.getElementById("av-hair-style").value;
-  saveToLS();
-  renderAvatarVisual();
-}
-
-function populateInvSelect(category, selectId) {
-  const select = document.getElementById(selectId);
-  select.innerHTML = "";
-  const owned = state.inventory[category];
-  
-  SHOP_ITEMS[category].forEach(item => {
-    if(owned.includes(item.id)) {
-      const opt = document.createElement("option");
-      opt.value = item.id;
-      opt.textContent = `${item.icon} ${item.name}`;
-      if(state.avatar[category === 'accessories' ? 'accessory' : (category === 'pets' ? 'pet' : 'clothes')] === item.id) {
-        opt.selected = true;
-      }
-      select.appendChild(opt);
-    }
-  });
-}
-
-function equipItem(category) {
-  const selectId = `inv-${category}`;
-  const val = document.getElementById(selectId).value;
-  if(category === 'clothes') state.avatar.clothes = val;
-  if(category === 'accessories') state.avatar.accessory = val;
-  if(category === 'pets') state.avatar.pet = val;
   saveToLS();
   renderAvatarVisual();
 }
@@ -430,47 +1125,94 @@ function renderShopItems() {
   container.innerHTML = "";
 
   const renderCat = (key, title) => {
-    let html = `<div class="shop-cat-title">${title}</div><div class="shop-grid">`;
+    let html = `<div><div class="shop-cat-title">${title}</div><div class="shop-grid">`;
     SHOP_ITEMS[key].forEach(item => {
-      if(item.id === 'none') return;
-      const isOwned = state.inventory[key].includes(item.id);
-      const canAfford = state.panducoins >= item.price;
-      
+      if (item.id === 'none') return;
+      const isOwned    = state.inventory[key] && state.inventory[key].includes(item.id);
+      const canAfford  = state.panducoins >= item.price;
+      const isEquipped = (key === 'clothes' && state.avatar.clothes === item.id) ||
+                         (key === 'accessories' && state.avatar.accessory === item.id) ||
+                         (key === 'pets' && state.avatar.pet === item.id) ||
+                         (key === 'cars' && state.avatar.car === item.id);
+
+      let btnHtml = '';
+      if (!isOwned) {
+        btnHtml = `<button class="shop-item-btn ${!canAfford ? '' : ''}"
+                    ${!canAfford ? 'disabled' : ''}
+                    onclick="buyItem('${key}','${item.id}',${item.price})">
+                    ${item.price} 🪙 COMPRAR
+                  </button>`;
+      } else if (isEquipped) {
+        btnHtml = `<button class="shop-item-btn equipped-btn" disabled>✔ EQUIPADO</button>`;
+      } else {
+        btnHtml = `<button class="shop-item-btn equip-btn"
+                    onclick="equipItemDirect('${key}','${item.id}')">
+                    EQUIPAR
+                  </button>`;
+      }
+
       html += `
-        <div class="shop-item">
-          <div class="shop-item-icon">${item.icon}</div>
+        <div class="shop-item ${isOwned ? 'item-owned' : ''}">
+          <div class="shop-item-preview">
+            <span class="${key === 'cars' ? 'preview-car-emoji' : 'preview-emoji'}">${item.icon || '?'}</span>
+          </div>
           <span class="shop-item-name">${item.name}</span>
-          <button class="shop-item-btn ${isOwned ? 'owned' : ''}" 
-                  ${isOwned ? 'disabled' : (!canAfford ? 'disabled' : '')} 
-                  onclick="buyItem('${key}', '${item.id}', ${item.price})">
-            ${isOwned ? '✔️ EN INVENTARIO' : `${item.price} 🪙 COMPRAR`}
-          </button>
+          ${!isOwned ? `<span class="shop-item-price">${item.price} 🪙</span>` : ''}
+          ${btnHtml}
         </div>
       `;
     });
-    html += `</div>`;
+    html += `</div></div>`;
     container.innerHTML += html;
   };
 
-  renderCat('clothes', 'ROPA & ESTILOS');
-  renderCat('accessories', 'ACCESORIOS');
-  renderCat('pets', 'MASCOTAS');
+  renderCat('clothes',     '👕 ROPA & ESTILOS');
+  renderCat('accessories', '💎 ACCESORIOS');
+  renderCat('pets',        '🐾 MASCOTAS');
+  renderCat('cars',        '🚗 GARAJE');
 }
 
 function buyItem(category, id, price) {
+  if (!state.inventory[category]) state.inventory[category] = ['none'];
   if (state.panducoins >= price && !state.inventory[category].includes(id)) {
     state.panducoins -= price;
     state.inventory[category].push(id);
+    // Auto-equipar al comprar
+    equipItemDirect(category, id, false);
     saveToLS();
     updatePanducoinsUI();
     renderShopItems();
-    showToast("¡Artículo comprado!", "success");
-    launchConfetti("#ffcc00"); // Mini celebración
+    renderAvatarVisual();
+    refreshHeaderAvatar();
+    showToast("¡Artículo comprado y equipado!", "success");
+    launchConfetti("#ffcc00");
   }
 }
 
+function equipItemDirect(category, id, showMsg = true) {
+  if (category === 'clothes')     state.avatar.clothes   = id;
+  if (category === 'accessories') state.avatar.accessory = id;
+  if (category === 'pets')        state.avatar.pet       = id;
+  if (category === 'cars')        state.avatar.car       = id;
+  saveToLS();
+  renderAvatarVisual();
+  refreshHeaderAvatar();
+  renderShopItems();
+  if (showMsg) showToast("¡Equipado!", "success");
+}
+
+// Función de compatibilidad con inventario antiguo
+function equipItem(category) {
+  const catMap = { clothes: 'clothes', accessories: 'accessories', pets: 'pets' };
+  const selectId = `inv-${category}`;
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const val = sel.value;
+  equipItemDirect(catMap[category] || category, val);
+}
+
 // ─────────────────────────────────────────────────────────────
-// BÚSQUEDA Y GRÁFICAS (Resto sin modificar lógicamente)
+// BÚSQUEDA Y GRÁFICAS
 // ─────────────────────────────────────────────────────────────
 
 let searchTimeout;
@@ -583,7 +1325,7 @@ function setupChartInteractions() {
 function closeChartModal() { document.getElementById("modal-chart-fs").classList.add("hidden"); drawCandlesticks(document.getElementById("inline-chart"), currentChartData, chartZoom, chartPanX); }
 
 // ─────────────────────────────────────────────────────────────
-// TRADING (Modificado para Panducoins)
+// TRADING
 // ─────────────────────────────────────────────────────────────
 
 async function fetchPrice(ticker) {
@@ -633,6 +1375,7 @@ function executeSell() {
   const ticker = document.getElementById("sell-ticker").value; const price = parseFloat(document.getElementById("sell-price").dataset.price); const qty = parseInt(document.getElementById("sell-qty").value);
   const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs; const pos = portfolio.find(p => p.ticker === ticker);
   if(!pos || qty <= 0 || qty > pos.qty) return showToast("Cantidad inválida", "error");
+  if(!price) return showToast("Obtén el precio primero", "error");
   const grossReturn = price * qty; const costBasis = pos.price * qty; const sellFees = calcSellFees(grossReturn, costBasis, state.market); const pnlAfterFees = grossReturn - costBasis - sellFees.totalDeductions;
   
   if(state.market === "ES") { state.balanceEs += sellFees.netReturn; state.stats.plEs += pnlAfterFees; } else { state.balanceUs += sellFees.netReturn; state.stats.plUs += pnlAfterFees; }
@@ -643,7 +1386,6 @@ function executeSell() {
   
   awardXP('sell_profit', { netGain: pnlAfterFees, pct: pnlPct });
   
-  // Novedad: Recompensa PANDUCOINS
   if (pnlAfterFees > 0) {
     const netGainEur = state.market === "ES" ? pnlAfterFees : (pnlAfterFees / state.exchangeRate);
     awardPanducoins(netGainEur);
@@ -687,6 +1429,7 @@ function updateUI() {
   document.getElementById("mkt-es").classList.toggle("active", isEs); document.getElementById("mkt-us").classList.toggle("active", !isEs);
   document.body.classList.toggle("market-es", isEs); document.body.classList.toggle("market-us", !isEs);
   renderPortfolio(); populateSellSelect(); updateNetWorth(); renderHistory(); renderStats(); updateXPBar(); updatePanducoinsUI();
+  refreshHeaderAvatar();
 }
 
 function renderPortfolio() {
@@ -744,6 +1487,7 @@ async function refreshPortfolio() {
   for(let pos of portfolio) { try { pos.currentPrice = await fetchPrice(pos.ticker); } catch(e) {} }
   updateUI(); if (btn) btn.textContent = "↻ ACTUALIZAR";
 }
+
 function populateSellSelect() {
   const select = document.getElementById("sell-ticker"); const portfolio = state.market === "ES" ? state.portfolioEs : state.portfolioUs;
   select.innerHTML = '<option value="">— Selecciona —</option>'; portfolio.forEach(p => select.innerHTML += `<option value="${p.ticker}">${p.ticker} (${p.qty} accs)</option>`);
@@ -770,8 +1514,8 @@ function openResetModal() { document.getElementById("modal-reset").classList.rem
 function closeResetModal() { document.getElementById("modal-reset").classList.add("hidden"); }
 function confirmReset() {
   localStorage.clear();
-  state = { market: "ES", balanceEs: INITIAL_BALANCE_ES, balanceUs: INITIAL_BALANCE_US, portfolioEs: [], portfolioUs: [], history: [], stats: { ops: 0, buys: 0, sells: 0, opsEs: 0, opsUs: 0, plEs: 0, plUs: 0, best: null, worst: null }, exchangeRate: 1.08, transferDir: "ES_TO_US", xp: 0, activeTitle: null, unlockedTitles: [], panducoins: 0, avatar: { gender: 'male', skin: '#ffdbac', eyes: '#000000', hairStyle: 'short', hairColor: '#000000', clothes: 'shirt_basic', accessory: 'none', pet: 'none' }, inventory: { clothes: ['shirt_basic'], accessories: ['none'], pets: ['none'] } };
-  saveToLS(); updateUI(); closeResetModal(); showToast("Juego reiniciado por completo", "success");
+  state = { market: "ES", balanceEs: INITIAL_BALANCE_ES, balanceUs: INITIAL_BALANCE_US, portfolioEs: [], portfolioUs: [], history: [], stats: { ops: 0, buys: 0, sells: 0, opsEs: 0, opsUs: 0, plEs: 0, plUs: 0, best: null, worst: null }, exchangeRate: 1.08, transferDir: "ES_TO_US", xp: 0, activeTitle: null, unlockedTitles: [], panducoins: 0, avatar: { gender: 'male', skin: '#ffdbac', eyes: '#000000', hairStyle: 'short', hairColor: '#000000', clothes: 'shirt_basic', accessory: 'none', pet: 'none', car: 'none' }, inventory: { clothes: ['shirt_basic'], accessories: ['none'], pets: ['none'], cars: ['none'] } };
+  saveToLS(); updateUI(); closeResetModal(); showToast("Juego reiniciado por completo", "success"); refreshHeaderAvatar();
 }
 
 async function loadExchangeRate() {
@@ -811,7 +1555,7 @@ function showLevelUpModal(level) {
   const ld = LEVELS.find(l => l.level === level); if (!ld) return;
   document.getElementById("lu-level-num").textContent = level; document.getElementById("lu-icon").textContent = ld.icon; document.getElementById("lu-title").textContent = ld.title; document.getElementById("lu-title").style.color = ld.color; document.getElementById("lu-desc").textContent = ld.desc; document.getElementById("lu-xp-total").textContent = state.xp + " XP";
   launchConfetti(ld.color); document.getElementById("modal-levelup").classList.remove("hidden");
-  if (!state.activeTitle || level > state.activeTitle) { state.activeTitle = level; saveToLS(); updateXPBar(); }
+  if (!state.activeTitle || level > parseInt(state.activeTitle)) { state.activeTitle = level; saveToLS(); updateXPBar(); }
 }
 function closeLevelUpModal() { document.getElementById("modal-levelup").classList.add("hidden"); }
 function launchConfetti(color) {
@@ -820,15 +1564,24 @@ function launchConfetti(color) {
   setTimeout(() => { if (container) container.innerHTML = ""; }, 4000);
 }
 
-function openRewardsModal() { renderRewardsPanel(); document.getElementById("modal-rewards").classList.remove("hidden"); }
+function openRewardsModal() {
+  renderRewardsPanel();
+  document.getElementById("modal-rewards").classList.remove("hidden");
+  // Dibujar avatar en rewards
+  setTimeout(() => {
+    const rewardsCanvas = document.getElementById("rewards-avatar-canvas");
+    if (rewardsCanvas) drawCharacter(rewardsCanvas, state.avatar, 1);
+  }, 50);
+}
 function closeRewardsModal() { document.getElementById("modal-rewards").classList.add("hidden"); }
 function renderRewardsPanel() {
   const ld = getLevelData(state.xp); const c = document.getElementById("rewards-levels-list"); c.innerHTML = "";
   document.getElementById("rw-level").textContent = `NIVEL ${ld.current.level}`; document.getElementById("rw-xp").textContent = `${state.xp} XP`; document.getElementById("rw-next-xp").textContent = ld.next ? `Próximo: ${ld.next.xpRequired} XP` : "Nivel máximo! 🏆";
-  const ad = LEVELS.find(l => l.level === (state.activeTitle || ld.current.level)) || ld.current;
-  document.getElementById("rw-active-icon").textContent = ad.icon; document.getElementById("rw-active-icon").style.color = ad.color; document.getElementById("rw-active-title").textContent = ad.title; document.getElementById("rw-active-title").style.color = ad.color;
+  const activeLevel = state.activeTitle ? parseInt(state.activeTitle) : ld.current.level;
+  const ad = LEVELS.find(l => l.level === activeLevel) || ld.current;
+  document.getElementById("rw-active-title").textContent = ad.title; document.getElementById("rw-active-title").style.color = ad.color;
   LEVELS.forEach(lvl => {
-    const unl = state.xp >= lvl.xpRequired; const act = state.activeTitle === lvl.level;
+    const unl = state.xp >= lvl.xpRequired; const act = parseInt(state.activeTitle) === lvl.level;
     c.innerHTML += `<div class="reward-item ${unl ? "unlocked" : "locked"} ${act ? "active-title" : ""}" style="--lvl-color:${lvl.color}"><div class="ri-left"><span class="ri-icon" style="color:${unl ? lvl.color : "#333"}">${unl ? lvl.icon : "🔒"}</span><div class="ri-info"><span class="ri-level-tag">NIV. ${lvl.level}</span><span class="ri-title" style="color:${unl ? lvl.color : "#333"}">${lvl.title}</span><span class="ri-desc">${unl ? lvl.desc : `Requiere ${lvl.xpRequired} XP`}</span></div></div><div class="ri-right">${unl ? (act ? `<span class="ri-badge-active">✔ ACTIVO</span>` : `<button class="ri-btn-equip" onclick="equipTitle(${lvl.level})">EQUIPAR</button>`) : `<span class="ri-badge-locked">${lvl.xpRequired} XP</span>`}</div></div>`;
   });
 }
