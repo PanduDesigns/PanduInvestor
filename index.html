@@ -54,11 +54,6 @@
         <span class="badge-title">Novato Bursátil</span>
       </button>
 
-      <!-- Mini avatar en cabecera -->
-      <button class="header-avatar-btn" onclick="openAvatarModal()" title="Mi Avatar">
-        <canvas id="header-avatar-canvas" width="40" height="56"></canvas>
-      </button>
-
       <div class="header-actions">
         <button class="btn-transfer" id="btn-transfer" onclick="openTransferModal()">⇄ TRANSF.</button>
         <button class="btn-reset" id="btn-reset" onclick="openResetModal()">⚠ RESET</button>
@@ -70,6 +65,38 @@
       <span class="xp-label" id="xp-label">NIVEL 1</span>
     </div>
   </header>
+
+  <!-- ══════════════════════════════════════════════════════════
+       ESCENA DEL JUGADOR — Casa, avatar animado, coche, mascota
+       ══════════════════════════════════════════════════════════ -->
+  <div class="player-world-wrap" id="player-world-wrap">
+    <canvas id="world-scene-canvas"></canvas>
+
+    <!-- Overlay UI en la escena -->
+    <div class="world-ui-overlay">
+      <div class="world-level-badge" id="world-level-badge">
+        <span class="wlb-icon" id="wlb-icon">🌱</span>
+        <div class="wlb-info">
+          <span class="wlb-title" id="wlb-title">Novato Bursátil</span>
+          <span class="wlb-level" id="wlb-level">NIVEL 1</span>
+        </div>
+      </div>
+      <button class="world-avatar-btn" onclick="openAvatarModal()" title="Personalizar avatar y tienda">
+        👾 PERSONALIZAR
+      </button>
+    </div>
+
+    <!-- Canvas del personaje animado (renderizado sobre la escena) -->
+    <div class="world-char-container" id="world-char-container">
+      <canvas id="world-char-canvas" width="64" height="96"></canvas>
+      <div class="world-pet-display" id="world-pet-display"></div>
+    </div>
+
+    <!-- Canvas del coche -->
+    <div class="world-car-container" id="world-car-container">
+      <canvas id="world-car-canvas" width="120" height="70"></canvas>
+    </div>
+  </div>
 
   <div class="market-banner" id="market-banner">
     <span id="mb-flag">🇪🇸</span>

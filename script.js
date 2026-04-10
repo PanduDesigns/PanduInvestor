@@ -876,8 +876,10 @@ window.addEventListener("load", () => {
   loadFromLS(); updateUI(); renderTickerChips(); setupChartInteractions();
   updateXPBar(); checkDailyLogin(); updatePanducoinsUI();
   setInterval(refreshPortfolio, 30000); refreshPortfolio();
-  // Dibujar mini avatar en cabecera tras carga
-  refreshHeaderAvatar();
+  // Dibujar escena del mundo del jugador
+  renderWorldScene();
+  startWorldCharBlink();
+  updateWorldSceneUI();
 });
 
 function checkDailyLogin() {
@@ -994,20 +996,735 @@ function updateXPBar() {
   if (label) label.textContent = `NIV.${ld.current.level} — ${state.xp} XP`;
 
   const badgeEl = document.getElementById("header-player-badge");
-  if (!badgeEl) return;
-  badgeEl.innerHTML = `<span class="badge-icon" style="color:${activeLevelData.color}">${activeLevelData.icon}</span><span class="badge-title" style="color:${activeLevelData.color}">${activeLevelData.title}</span>`;
-  badgeEl.style.borderColor = activeLevelData.color + "55";
-  badgeEl.style.background = activeLevelData.color + "11";
+  if (badgeEl) {
+    badgeEl.innerHTML = `<span class="badge-icon" style="color:${activeLevelData.color}">${activeLevelData.icon}</span><span class="badge-title" style="color:${activeLevelData.color}">${activeLevelData.title}</span>`;
+    badgeEl.style.borderColor = activeLevelData.color + "55";
+    badgeEl.style.background = activeLevelData.color + "11";
+  }
+  updateWorldSceneUI();
 }
 
 // ─────────────────────────────────────────────────────────────
-// MINI AVATAR EN CABECERA
+// ESCENA DEL MUNDO DEL JUGADOR (casa exterior animada)
 // ─────────────────────────────────────────────────────────────
 
+// Stub de compatibilidad — ya no hay mini-canvas en cabecera
 function refreshHeaderAvatar() {
-  const canvas = document.getElementById("header-avatar-canvas");
+  renderWorldScene();
+}
+
+/**
+ * Determina el "tier" de casa según el nivel actual del jugador.
+ * tier 0 = chabola / chalet pequeño (niveles 1-3)
+ * tier 1 = casa decente (niveles 4-6)
+ * tier 2 = villa moderna (niveles 7-9)
+ * tier 3 = mansión (niveles 10-12)
+ * tier 4 = palacio / penthouse (niveles 13-15)
+ */
+function getHouseTier() {
+  const ld = getLevelData(state.xp);
+  const lvl = ld.current.level;
+  if (lvl <= 3)  return 0;
+  if (lvl <= 6)  return 1;
+  if (lvl <= 9)  return 2;
+  if (lvl <= 12) return 3;
+  return 4;
+}
+
+/**
+ * Dibuja el fondo de escena exterior en el canvas del mundo.
+ * Incluye cielo, sol/luna, edificio de la casa que crece con el nivel,
+ * jardín/detalles y suelo con acera.
+ */
+function renderWorldScene() {
+  const canvas = document.getElementById('world-scene-canvas');
+  if (!canvas) return;
+  const wrap = document.getElementById('player-world-wrap');
+  if (!wrap) return;
+
+  const W = wrap.offsetWidth  || 800;
+  const H = wrap.offsetHeight || 260;
+  canvas.width  = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const tier = getHouseTier();
+
+  // ── CIELO ──
+  const skyColors = [
+    ['#0a0e1f', '#111830'],   // noche oscura
+    ['#0d1830', '#162240'],   // noche estrellada
+    ['#0f2040', '#1a3060'],   // atardecer tardío
+    ['#0a1525', '#0d2040'],   // cielo nocturno rico
+    ['#06091a', '#0a0f25'],   // cielo de penthouse oscuro
+  ];
+  const [skyTop, skyBot] = skyColors[tier];
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, H * 0.65);
+  skyGrad.addColorStop(0, skyTop);
+  skyGrad.addColorStop(1, skyBot);
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── ESTRELLAS (más en tier alto) ──
+  const starCount = 20 + tier * 15;
+  const t = Date.now() * 0.001;
+  for (let i = 0; i < starCount; i++) {
+    const sx = ((i * 137.508 + 50) % W);
+    const sy = ((i * 53.1 + 20) % (H * 0.55));
+    const twinkle = 0.4 + 0.6 * Math.abs(Math.sin(t * 0.8 + i));
+    ctx.globalAlpha = twinkle * (0.3 + tier * 0.1);
+    ctx.fillStyle = i % 7 === 0 ? '#00e5ff' : '#ffffff';
+    ctx.fillRect(sx, sy, tier >= 2 ? 2 : 1, tier >= 2 ? 2 : 1);
+  }
+  ctx.globalAlpha = 1;
+
+  // ── LUNA (más grande con tier) ──
+  const moonX = W * 0.82;
+  const moonY = H * 0.16;
+  const moonR  = 10 + tier * 5;
+  const moonGrad = ctx.createRadialGradient(moonX - moonR * 0.3, moonY - moonR * 0.3, 2, moonX, moonY, moonR);
+  moonGrad.addColorStop(0, '#fffde0');
+  moonGrad.addColorStop(0.7, '#e8e090');
+  moonGrad.addColorStop(1, '#c8b84a');
+  ctx.fillStyle = moonGrad;
+  ctx.beginPath();
+  ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.beginPath();
+  ctx.arc(moonX + moonR * 0.2, moonY - moonR * 0.1, moonR * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── EDIFICIOS DEL FONDO (silueta de ciudad) ──
+  drawCityBackdrop(ctx, W, H, tier);
+
+  // ── SUELO / CÉSPED ──
+  drawGround(ctx, W, H, tier);
+
+  // ── CASA PRINCIPAL ──
+  drawHouseForTier(ctx, W, H, tier);
+
+  // ── ÁRBOLES / VEGETACIÓN ──
+  drawVegetation(ctx, W, H, tier);
+
+  // ── CHARCO de neón en el suelo ──
+  if (tier >= 2) {
+    const neonGrad = ctx.createLinearGradient(0, H - 55, 0, H - 48);
+    neonGrad.addColorStop(0, 'rgba(0,229,255,0.08)');
+    neonGrad.addColorStop(1, 'rgba(0,229,255,0)');
+    ctx.fillStyle = neonGrad;
+    ctx.fillRect(0, H - 55, W, 8);
+  }
+
+  // ── ACERA / CAMINO ──
+  drawPath(ctx, W, H, tier);
+
+  // Ahora dibujar personaje y coche en sus contenedores DOM
+  renderWorldChar();
+  renderWorldCar();
+}
+
+function drawCityBackdrop(ctx, W, H, tier) {
+  const groundY = H - 54;
+  const buildings = [
+    { x: 0.02, w: 0.04, h: 0.3 + tier * 0.04, col: '#0d1428' },
+    { x: 0.07, w: 0.03, h: 0.22 + tier * 0.06, col: '#0f1830' },
+    { x: 0.11, w: 0.05, h: 0.35 + tier * 0.03, col: '#0b1220' },
+    { x: 0.17, w: 0.04, h: 0.18 + tier * 0.07, col: '#0d1530' },
+    { x: 0.62, w: 0.04, h: 0.25 + tier * 0.05, col: '#0a1020' },
+    { x: 0.67, w: 0.06, h: 0.32 + tier * 0.04, col: '#0c1328' },
+    { x: 0.74, w: 0.03, h: 0.20 + tier * 0.06, col: '#0d1530' },
+    { x: 0.78, w: 0.05, h: 0.28 + tier * 0.04, col: '#0a1020' },
+    { x: 0.84, w: 0.04, h: 0.36 + tier * 0.03, col: '#0e1835' },
+    { x: 0.89, w: 0.03, h: 0.22 + tier * 0.05, col: '#0a1020' },
+    { x: 0.93, w: 0.06, h: 0.30 + tier * 0.04, col: '#0d1530' },
+  ];
+  buildings.forEach(b => {
+    const bx = b.x * W;
+    const bw = b.w * W;
+    const bh = b.h * H;
+    const by = groundY - bh;
+    ctx.fillStyle = b.col;
+    ctx.fillRect(bx, by, bw, bh);
+    // Ventanas de los edificios del fondo
+    if (tier >= 1) {
+      ctx.fillStyle = Math.random() > 0.3 ? 'rgba(255,230,100,0.25)' : 'rgba(0,229,255,0.15)';
+      for (let wy = by + 4; wy < groundY - 8; wy += 8) {
+        for (let wx = bx + 3; wx < bx + bw - 3; wx += 7) {
+          if (Math.sin(wx * 0.3 + wy * 0.7) > 0.1) {
+            ctx.fillRect(wx, wy, 3, 4);
+          }
+        }
+      }
+    }
+  });
+}
+
+function drawGround(ctx, W, H, tier) {
+  const groundY = H - 54;
+  const grassColors = [
+    ['#1a2a0a', '#223310'],  // tierra seca
+    ['#1a2f0c', '#263d14'],  // césped modesto
+    ['#18320a', '#254213'],  // césped cuidado
+    ['#163a0a', '#224e12'],  // jardín premium
+    ['#0f3008', '#1c4810'],  // jardín de palacio
+  ];
+  const [grassDark, grassLight] = grassColors[tier];
+  ctx.fillStyle = grassDark;
+  ctx.fillRect(0, groundY, W, H - groundY);
+  ctx.fillStyle = grassLight;
+  ctx.fillRect(0, groundY, W, 4);
+  // Textura de hierba
+  if (tier >= 1) {
+    ctx.fillStyle = 'rgba(30,80,10,0.3)';
+    for (let gx = 10; gx < W; gx += 12) {
+      ctx.fillRect(gx, groundY, 1, 3 + Math.sin(gx * 0.5) * 2);
+    }
+  }
+}
+
+function drawPath(ctx, W, H, tier) {
+  const groundY = H - 54;
+  const pathColors = [
+    '#2a2818', '#333020', '#383530', '#404040', '#4a4560'
+  ];
+  // Camino desde la puerta de la casa hasta el borde derecho (donde está el coche)
+  const houseX = W * 0.12;
+  const pathW   = W * 0.65;
+  ctx.fillStyle = pathColors[tier];
+  ctx.fillRect(houseX + 18, groundY, pathW, H - groundY);
+  // Bordillos
+  ctx.fillStyle = tier >= 3 ? '#6a6a8a' : '#3a3820';
+  ctx.fillRect(houseX + 18, groundY, pathW, 2);
+  // Líneas de loseta
+  if (tier >= 2) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for (let lx = houseX + 18; lx < houseX + 18 + pathW; lx += 20) {
+      ctx.beginPath();
+      ctx.moveTo(lx, groundY);
+      ctx.lineTo(lx, H);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawHouseForTier(ctx, W, H, tier) {
+  const groundY = H - 54;
+  const hx = W * 0.04;  // esquina izquierda de la zona de la casa
+
+  if (tier === 0) {
+    // ── CHABOLA / CASITA PEQUEÑA ──
+    const bx = hx + 10, bw = 90, bh = 70;
+    const by = groundY - bh;
+    // Paredes
+    ctx.fillStyle = '#a07850';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = '#8a6440';
+    ctx.fillRect(bx, by, 6, bh);
+    ctx.fillRect(bx + bw - 6, by, 6, bh);
+    // Tejado triangular
+    ctx.fillStyle = '#703010';
+    ctx.beginPath();
+    ctx.moveTo(bx - 6, by);
+    ctx.lineTo(bx + bw / 2, by - 30);
+    ctx.lineTo(bx + bw + 6, by);
+    ctx.closePath();
+    ctx.fill();
+    // Puerta
+    ctx.fillStyle = '#5a3010';
+    ctx.fillRect(bx + bw / 2 - 8, by + bh - 28, 16, 28);
+    ctx.fillStyle = '#8a5020';
+    ctx.fillRect(bx + bw / 2 - 6, by + bh - 26, 5, 12);
+    // Ventana
+    ctx.fillStyle = '#a0c8d8';
+    ctx.fillRect(bx + 14, by + 16, 22, 18);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(bx + 15, by + 17, 8, 6);
+    ctx.fillStyle = '#5a3010';
+    ctx.fillRect(bx + 14, by + 24, 22, 2);
+    ctx.fillRect(bx + 24, by + 16, 2, 18);
+    // Chimenea
+    ctx.fillStyle = '#804020';
+    ctx.fillRect(bx + bw - 22, by - 38, 12, 16);
+    // Humo
+    ctx.fillStyle = 'rgba(180,180,180,0.2)';
+    const smokeT = Date.now() * 0.0008;
+    ctx.beginPath();
+    ctx.arc(bx + bw - 16, by - 44 + Math.sin(smokeT) * 3, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(bx + bw - 14, by - 52 + Math.sin(smokeT + 1) * 4, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+  } else if (tier === 1) {
+    // ── CHALET ESTÁNDAR ──
+    const bx = hx + 5, bw = 120, bh = 90;
+    const by = groundY - bh;
+    // Paredes principales
+    ctx.fillStyle = '#c8b08a';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = '#b09870';
+    ctx.fillRect(bx, by, 8, bh);
+    ctx.fillRect(bx + bw - 8, by, 8, bh);
+    // Tejado
+    ctx.fillStyle = '#8b4513';
+    ctx.beginPath();
+    ctx.moveTo(bx - 8, by);
+    ctx.lineTo(bx + bw / 2, by - 38);
+    ctx.lineTo(bx + bw + 8, by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#6b3010';
+    ctx.fillRect(bx - 8, by - 2, bw + 16, 5);
+    // Ventanas x2
+    for (let wi = 0; wi < 2; wi++) {
+      const wx = bx + 12 + wi * 56;
+      ctx.fillStyle = '#a8d8f0';
+      ctx.fillRect(wx, by + 18, 26, 22);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillRect(wx + 2, by + 20, 8, 6);
+      ctx.fillStyle = '#6b3010';
+      ctx.fillRect(wx, by + 27, 26, 2);
+      ctx.fillRect(wx + 12, by + 18, 2, 22);
+    }
+    // Puerta con porche
+    ctx.fillStyle = '#6b3010';
+    ctx.fillRect(bx + bw / 2 - 12, by + bh - 34, 24, 34);
+    ctx.fillStyle = '#f0d060';
+    ctx.fillRect(bx + bw / 2 + 4, by + bh - 22, 4, 4);
+    // Porche
+    ctx.fillStyle = '#c8b08a';
+    ctx.fillRect(bx + bw / 2 - 18, by + bh - 38, 36, 6);
+    ctx.fillStyle = '#b09870';
+    ctx.fillRect(bx + bw / 2 - 16, by + bh - 38, 4, 38);
+    ctx.fillRect(bx + bw / 2 + 12, by + bh - 38, 4, 38);
+    // Garaje lateral
+    ctx.fillStyle = '#b09870';
+    ctx.fillRect(bx + bw, by + bh - 60, 44, 60);
+    ctx.fillStyle = '#8a6a40';
+    ctx.fillRect(bx + bw + 4, by + bh - 55, 36, 52);
+    ctx.fillStyle = '#c8b08a';
+    for (let gi = 0; gi < 4; gi++) ctx.fillRect(bx + bw + 4, by + bh - 55 + gi * 13, 36, 6);
+
+  } else if (tier === 2) {
+    // ── VILLA MODERNA ──
+    const bx = hx, bw = 170, bh = 110;
+    const by = groundY - bh;
+    // Cuerpo principal
+    ctx.fillStyle = '#d8d0c0';
+    ctx.fillRect(bx, by, bw, bh);
+    // Tejado plano moderno
+    ctx.fillStyle = '#333845';
+    ctx.fillRect(bx - 6, by - 12, bw + 12, 16);
+    // Fachada con franjas
+    ctx.fillStyle = '#a8a898';
+    ctx.fillRect(bx, by + 40, bw, 4);
+    ctx.fillRect(bx, by + 80, bw, 4);
+    // Ventanas grandes panorámicas
+    ctx.fillStyle = '#7ab8d8';
+    ctx.fillRect(bx + 16, by + 12, 52, 36);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(bx + 18, by + 14, 18, 10);
+    // Segunda ventana
+    ctx.fillStyle = '#7ab8d8';
+    ctx.fillRect(bx + 80, by + 12, 52, 36);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(bx + 82, by + 14, 18, 10);
+    // Ventanas inferiores
+    ctx.fillStyle = '#7ab8d8';
+    ctx.fillRect(bx + 16, by + 56, 30, 24);
+    ctx.fillRect(bx + 100, by + 56, 30, 24);
+    // Puerta moderna
+    ctx.fillStyle = '#2a3040';
+    ctx.fillRect(bx + bw / 2 - 14, by + bh - 40, 28, 40);
+    ctx.fillStyle = 'rgba(100,200,255,0.3)';
+    ctx.fillRect(bx + bw / 2 - 12, by + bh - 38, 24, 36);
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillRect(bx + bw / 2 + 4, by + bh - 24, 4, 4);
+    // Garaje moderno con 2 plazas
+    ctx.fillStyle = '#c8c0b0';
+    ctx.fillRect(bx + bw, by + bh - 65, 60, 65);
+    ctx.fillStyle = '#2a3040';
+    ctx.fillRect(bx + bw + 4, by + bh - 58, 52, 55);
+    ctx.fillStyle = 'rgba(100,200,255,0.2)';
+    ctx.fillRect(bx + bw + 6, by + bh - 56, 22, 50);
+    ctx.fillRect(bx + bw + 32, by + bh - 56, 22, 50);
+    // Balcón
+    ctx.fillStyle = '#555a6a';
+    ctx.fillRect(bx + 8, by + 48, 100, 8);
+    ctx.fillStyle = '#888';
+    for (let bi = 0; bi < 8; bi++) ctx.fillRect(bx + 10 + bi * 12, by + 56, 3, 16);
+    // Luces neón
+    ctx.fillStyle = 'rgba(0,229,255,0.6)';
+    ctx.fillRect(bx + bw - 8, by - 12, bw + 6, 3);
+
+  } else if (tier === 3) {
+    // ── MANSIÓN ──
+    const bx = hx, bw = 210, bh = 130;
+    const by = groundY - bh;
+    // Base / plataforma
+    ctx.fillStyle = '#e8e0d0';
+    ctx.fillRect(bx - 8, by + bh - 8, bw + 16, 12);
+    // Cuerpo principal
+    ctx.fillStyle = '#e8e0d0';
+    ctx.fillRect(bx, by, bw, bh);
+    // Detalle de ladrillo simulado
+    ctx.fillStyle = '#d8d0c0';
+    for (let ri = 0; ri < 8; ri++) {
+      for (let rj = 0; rj < 14; rj++) {
+        if ((ri + rj) % 2 === 0) ctx.fillRect(bx + 2 + rj * 14, by + 4 + ri * 14, 12, 10);
+      }
+    }
+    // Tejado con buhardillas
+    ctx.fillStyle = '#334';
+    ctx.beginPath();
+    ctx.moveTo(bx - 10, by);
+    ctx.lineTo(bx + bw / 2, by - 50);
+    ctx.lineTo(bx + bw + 10, by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#445';
+    ctx.fillRect(bx - 10, by - 2, bw + 20, 5);
+    // Torres laterales
+    for (let ti = 0; ti < 2; ti++) {
+      const tx = bx + (ti === 0 ? -18 : bw + 4);
+      ctx.fillStyle = '#d0c8b8';
+      ctx.fillRect(tx, by - 20, 22, bh + 20);
+      ctx.fillStyle = '#334';
+      ctx.beginPath();
+      ctx.moveTo(tx - 4, by - 20);
+      ctx.lineTo(tx + 11, by - 50);
+      ctx.lineTo(tx + 26, by - 20);
+      ctx.closePath();
+      ctx.fill();
+      // Ventana redonda de torre
+      ctx.fillStyle = '#7ab8d8';
+      ctx.beginPath();
+      ctx.arc(tx + 11, by, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Ventanas elegantes
+    for (let wi = 0; wi < 4; wi++) {
+      const wx = bx + 14 + wi * 46;
+      ctx.fillStyle = '#7ab8d8';
+      ctx.fillRect(wx, by + 16, 28, 36);
+      ctx.fillStyle = '#5a8ab0';
+      ctx.fillRect(wx, by + 16, 28, 4);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillRect(wx + 2, by + 21, 10, 8);
+      ctx.fillStyle = '#d0c8b8';
+      ctx.fillRect(wx, by + 31, 28, 2);
+      ctx.fillRect(wx + 12, by + 16, 2, 36);
+      // Ventana arco
+      ctx.fillStyle = '#e8e0d0';
+      ctx.beginPath();
+      ctx.arc(wx + 14, by + 16, 14, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = '#7ab8d8';
+      ctx.beginPath();
+      ctx.arc(wx + 14, by + 16, 12, Math.PI, 0);
+      ctx.fill();
+    }
+    // Ventanas planta baja
+    for (let wi = 0; wi < 3; wi++) {
+      const wx = bx + 22 + wi * 62;
+      ctx.fillStyle = '#7ab8d8';
+      ctx.fillRect(wx, by + 68, 30, 28);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillRect(wx + 2, by + 70, 10, 8);
+      ctx.fillStyle = '#d0c8b8';
+      ctx.fillRect(wx, by + 80, 30, 2);
+      ctx.fillRect(wx + 14, by + 68, 2, 28);
+    }
+    // Entrada doble con columnas
+    ctx.fillStyle = '#a8a098';
+    ctx.fillRect(bx + bw / 2 - 24, by + bh - 50, 48, 50);
+    ctx.fillStyle = 'rgba(100,200,255,0.25)';
+    ctx.fillRect(bx + bw / 2 - 22, by + bh - 48, 44, 46);
+    ctx.fillStyle = '#e8e0d0';
+    ctx.fillRect(bx + bw / 2 - 24, by + bh - 55, 6, 55);
+    ctx.fillRect(bx + bw / 2 + 18, by + bh - 55, 6, 55);
+    // Garaje doble grande
+    ctx.fillStyle = '#d8d0c0';
+    ctx.fillRect(bx + bw + 28, by + bh - 80, 80, 80);
+    ctx.fillStyle = '#556';
+    ctx.fillRect(bx + bw + 34, by + bh - 72, 68, 70);
+    ctx.fillStyle = 'rgba(100,200,255,0.2)';
+    ctx.fillRect(bx + bw + 36, by + bh - 70, 30, 66);
+    ctx.fillRect(bx + bw + 70, by + bh - 70, 30, 66);
+    // Remates dorados
+    ctx.fillStyle = 'rgba(255,200,0,0.5)';
+    ctx.fillRect(bx - 10, by - 2, bw + 20, 3);
+
+  } else {
+    // ── PALACIO / PENTHOUSE ──
+    const bx = hx, bw = 240, bh = 150;
+    const by = groundY - bh;
+    // Base plataforma con escaleras
+    ctx.fillStyle = '#f0e8d8';
+    ctx.fillRect(bx - 20, groundY - 12, bw + 40, 16);
+    ctx.fillRect(bx - 14, groundY - 22, bw + 28, 12);
+    // Cuerpo principal mármol
+    const mGrad = ctx.createLinearGradient(bx, by, bx + bw, by);
+    mGrad.addColorStop(0, '#f0e8d8');
+    mGrad.addColorStop(0.3, '#fff8f0');
+    mGrad.addColorStop(0.7, '#f8f0e8');
+    mGrad.addColorStop(1, '#e8e0d0');
+    ctx.fillStyle = mGrad;
+    ctx.fillRect(bx, by, bw, bh);
+    // Cornisas y decoración
+    ctx.fillStyle = '#c8c0b0';
+    ctx.fillRect(bx - 6, by + 50, bw + 12, 6);
+    ctx.fillRect(bx - 6, by + 100, bw + 12, 6);
+    ctx.fillRect(bx - 6, by - 4, bw + 12, 8);
+    // Tejado con cúpula dorada
+    ctx.fillStyle = '#2a3050';
+    ctx.fillRect(bx - 8, by - 8, bw + 16, 10);
+    // Cúpula
+    ctx.fillStyle = '#d4aa00';
+    ctx.beginPath();
+    ctx.arc(bx + bw / 2, by - 24, 28, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = '#ffcc00';
+    ctx.beginPath();
+    ctx.arc(bx + bw / 2, by - 24, 22, Math.PI, 0);
+    ctx.fill();
+    // Cruz dorada
+    ctx.fillStyle = '#ffdd00';
+    ctx.fillRect(bx + bw / 2 - 2, by - 56, 4, 26);
+    ctx.fillRect(bx + bw / 2 - 8, by - 50, 16, 4);
+    // Torres elegantes
+    for (let ti = 0; ti < 2; ti++) {
+      const tx = bx + (ti === 0 ? -22 : bw + 6);
+      ctx.fillStyle = '#f0e8d8';
+      ctx.fillRect(tx, by - 30, 20, bh + 30);
+      ctx.fillStyle = '#c8c0b0';
+      ctx.fillRect(tx - 2, by - 32, 24, 5);
+      ctx.fillRect(tx - 2, by + 18, 24, 4);
+      ctx.fillStyle = '#d4aa00';
+      ctx.beginPath();
+      ctx.moveTo(tx - 4, by - 32);
+      ctx.lineTo(tx + 10, by - 60);
+      ctx.lineTo(tx + 24, by - 32);
+      ctx.closePath();
+      ctx.fill();
+      // Ventanas de torre
+      ctx.fillStyle = '#7ab8d8';
+      ctx.fillRect(tx + 4, by, 12, 16);
+      ctx.fillRect(tx + 4, by + 30, 12, 16);
+    }
+    // Ventanas con arcos grandes
+    for (let wi = 0; wi < 5; wi++) {
+      const wx = bx + 10 + wi * 44;
+      ctx.fillStyle = '#7ab8d8';
+      ctx.fillRect(wx, by + 12, 26, 38);
+      ctx.fillStyle = '#e8f4ff';
+      ctx.beginPath();
+      ctx.arc(wx + 13, by + 12, 13, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = '#7ab8d8';
+      ctx.beginPath();
+      ctx.arc(wx + 13, by + 12, 11, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(wx + 2, by + 14, 8, 10);
+      ctx.fillStyle = '#d4c8b8';
+      ctx.fillRect(wx, by + 28, 26, 2);
+      ctx.fillRect(wx + 11, by + 12, 2, 38);
+    }
+    // Planta baja ventanas
+    for (let wi = 0; wi < 4; wi++) {
+      const wx = bx + 18 + wi * 54;
+      ctx.fillStyle = '#7ab8d8';
+      ctx.fillRect(wx, by + 64, 28, 36);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillRect(wx + 2, by + 66, 10, 8);
+      ctx.fillStyle = '#d4c8b8';
+      ctx.fillRect(wx, by + 79, 28, 2);
+      ctx.fillRect(wx + 13, by + 64, 2, 36);
+    }
+    // Columnas de entrada
+    for (let ci = 0; ci < 4; ci++) {
+      const cx = bx + bw / 2 - 30 + ci * 20;
+      ctx.fillStyle = '#e8e0d0';
+      ctx.fillRect(cx, by + bh - 55, 8, 55);
+      ctx.fillStyle = '#d4c8b8';
+      ctx.fillRect(cx - 2, by + bh - 55, 12, 6);
+      ctx.fillRect(cx - 2, groundY - 54, 12, 6);
+    }
+    // Puerta monumental
+    ctx.fillStyle = '#1a2040';
+    ctx.fillRect(bx + bw / 2 - 20, by + bh - 50, 40, 50);
+    ctx.fillStyle = 'rgba(100,200,255,0.3)';
+    ctx.fillRect(bx + bw / 2 - 18, by + bh - 48, 36, 46);
+    ctx.fillStyle = '#d4aa00';
+    ctx.fillRect(bx + bw / 2 - 20, by + bh - 52, 40, 4);
+    // Garaje de lujo triple
+    ctx.fillStyle = '#e8e0d0';
+    ctx.fillRect(bx + bw + 30, by + bh - 90, 100, 90);
+    ctx.fillStyle = '#2a3050';
+    for (let gi = 0; gi < 3; gi++) {
+      ctx.fillRect(bx + bw + 34 + gi * 32, by + bh - 82, 28, 80);
+      ctx.fillStyle = 'rgba(100,200,255,0.25)';
+      ctx.fillRect(bx + bw + 36 + gi * 32, by + bh - 80, 24, 76);
+      ctx.fillStyle = '#2a3050';
+    }
+    // Neón dorado en el palacio
+    ctx.fillStyle = 'rgba(255,210,0,0.6)';
+    ctx.fillRect(bx - 8, by - 6, bw + 16, 3);
+    ctx.fillStyle = 'rgba(0,229,255,0.4)';
+    ctx.fillRect(bx - 6, by + 50, bw + 12, 2);
+    ctx.fillRect(bx - 6, by + 100, bw + 12, 2);
+  }
+}
+
+function drawVegetation(ctx, W, H, tier) {
+  const groundY = H - 54;
+  const treeColors = [
+    '#2d4a10', '#3a6018', '#2a5e14', '#1e6010', '#165a0e'
+  ];
+  const treeCount = 1 + tier * 2;
+  const treePositions = [
+    [W * 0.45, W * 0.50],
+    [W * 0.44, W * 0.50, W * 0.55],
+    [W * 0.42, W * 0.47, W * 0.54, W * 0.60],
+    [W * 0.42, W * 0.46, W * 0.51, W * 0.57, W * 0.62],
+    [W * 0.41, W * 0.45, W * 0.50, W * 0.55, W * 0.60, W * 0.65],
+  ];
+  const positions = treePositions[Math.min(tier, 4)];
+
+  positions.forEach((px, i) => {
+    const treeH = 30 + tier * 8 + (i % 3) * 6;
+    const treeW = 18 + tier * 3;
+    const ty    = groundY - treeH;
+    // Tronco
+    ctx.fillStyle = '#5a3a10';
+    ctx.fillRect(px - 3, ty + treeH - 14, 6, 14);
+    // Copa
+    ctx.fillStyle = treeColors[tier];
+    ctx.beginPath();
+    ctx.moveTo(px, ty);
+    ctx.lineTo(px - treeW, ty + treeH - 10);
+    ctx.lineTo(px + treeW, ty + treeH - 10);
+    ctx.closePath();
+    ctx.fill();
+    // Segunda capa
+    ctx.fillStyle = lighten(treeColors[tier], 15);
+    ctx.beginPath();
+    ctx.moveTo(px, ty + 8);
+    ctx.lineTo(px - treeW * 0.8, ty + treeH - 4);
+    ctx.lineTo(px + treeW * 0.8, ty + treeH - 4);
+    ctx.closePath();
+    ctx.fill();
+    // Flores si tier >= 3
+    if (tier >= 3) {
+      ctx.fillStyle = '#ff88cc';
+      ctx.beginPath();
+      ctx.arc(px - 5, ty + 14, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(px + 7, ty + 20, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // Arbustos cerca de la casa
+  const bushCount = tier + 1;
+  for (let bi = 0; bi < bushCount; bi++) {
+    const bx = W * 0.14 + bi * 22;
+    const bh2 = 10 + tier * 3;
+    ctx.fillStyle = treeColors[tier];
+    ctx.beginPath();
+    ctx.arc(bx, groundY - bh2 / 2, bh2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = lighten(treeColors[tier], 20);
+    ctx.beginPath();
+    ctx.arc(bx + 4, groundY - bh2 / 2 - 2, bh2 * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    if (tier >= 2) {
+      ctx.fillStyle = '#ffcc00';
+      ctx.beginPath();
+      ctx.arc(bx - 3, groundY - bh2 - 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function renderWorldChar() {
+  const canvas = document.getElementById('world-char-canvas');
   if (!canvas) return;
   drawCharacter(canvas, state.avatar, 1);
+
+  // Mascota
+  const petDisplay = document.getElementById('world-pet-display');
+  if (petDisplay) {
+    const petItem = SHOP_ITEMS.pets.find(p => p.id === state.avatar.pet);
+    petDisplay.textContent = (petItem && petItem.id !== 'none') ? petItem.icon : '';
+  }
+}
+
+function renderWorldCar() {
+  const carContainer = document.getElementById('world-car-container');
+  const canvas = document.getElementById('world-car-canvas');
+  if (!canvas) return;
+
+  if (!state.avatar.car || state.avatar.car === 'none') {
+    carContainer.style.display = 'none';
+    return;
+  }
+  carContainer.style.display = 'block';
+  drawCar(canvas, state.avatar.car);
+}
+
+// Animación de parpadeo: redibuja ojos abiertos/cerrados periódicamente
+let _worldBlinkTimer = null;
+function startWorldCharBlink() {
+  if (_worldBlinkTimer) clearInterval(_worldBlinkTimer);
+  _worldBlinkTimer = setInterval(() => {
+    const canvas = document.getElementById('world-char-canvas');
+    if (!canvas) return;
+    // Dibujar con ojos cerrados brevemente
+    const blinkAv = { ...state.avatar, _blink: true };
+    drawCharacterBlink(canvas, blinkAv, 1);
+    setTimeout(() => {
+      // Restaurar ojos normales
+      drawCharacter(canvas, state.avatar, 1);
+    }, 120);
+  }, 3200 + Math.random() * 1800);
+}
+
+function drawCharacterBlink(canvas, av, scale) {
+  // Dibujamos igual que drawCharacter pero con los ojos cerrados
+  drawCharacter(canvas, av, scale);
+  // Superponer ojos cerrados
+  const W = 64, H = 96;
+  const ctx = canvas.getContext('2d');
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.imageSmoothingEnabled = false;
+  const skin = av.skin || '#ffdbac';
+  // Tapar ojos con piel y dibujar línea cerrada
+  ctx.fillStyle = skin;
+  ctx.fillRect(24, 25, 7, 5);
+  ctx.fillRect(33, 25, 7, 5);
+  ctx.fillStyle = darken(skin, 20);
+  ctx.fillRect(24, 27, 7, 2);
+  ctx.fillRect(33, 27, 7, 2);
+  ctx.restore();
+}
+
+function updateWorldSceneUI() {
+  const ld = getLevelData(state.xp);
+  const activeLevelData = LEVELS.find(l => l.level === (state.activeTitle ? parseInt(state.activeTitle) : ld.current.level)) || ld.current;
+
+  const wlbIcon = document.getElementById('wlb-icon');
+  const wlbTitle = document.getElementById('wlb-title');
+  const wlbLevel = document.getElementById('wlb-level');
+  if (wlbIcon)  wlbIcon.textContent  = activeLevelData.icon;
+  if (wlbTitle) { wlbTitle.textContent = activeLevelData.title; wlbTitle.style.color = activeLevelData.color; }
+  if (wlbLevel) wlbLevel.textContent  = `NIVEL ${ld.current.level}`;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1039,15 +1756,16 @@ function renderAvatarVisual() {
   const carCanvas = document.getElementById("car-canvas");
   if (carCanvas) drawCar(carCanvas, state.avatar.car);
 
-  // Mascota
+  // Mascota en modal
   const petDisplay = document.getElementById("avatar-pet-display");
   if (petDisplay) {
     const petItem = SHOP_ITEMS.pets.find(p => p.id === state.avatar.pet);
     petDisplay.textContent = (petItem && petItem.id !== 'none') ? petItem.icon : '';
   }
 
-  // Mini avatar en cabecera
-  refreshHeaderAvatar();
+  // Escena del mundo del jugador
+  renderWorldScene();
+  updateWorldSceneUI();
 
   // Avatar en modal rewards (si está abierto)
   const rewardsCanvas = document.getElementById("rewards-avatar-canvas");
@@ -1183,7 +1901,6 @@ function buyItem(category, id, price) {
     updatePanducoinsUI();
     renderShopItems();
     renderAvatarVisual();
-    refreshHeaderAvatar();
     showToast("¡Artículo comprado y equipado!", "success");
     launchConfetti("#ffcc00");
   }
@@ -1196,7 +1913,6 @@ function equipItemDirect(category, id, showMsg = true) {
   if (category === 'cars')        state.avatar.car       = id;
   saveToLS();
   renderAvatarVisual();
-  refreshHeaderAvatar();
   renderShopItems();
   if (showMsg) showToast("¡Equipado!", "success");
 }
@@ -1429,7 +2145,8 @@ function updateUI() {
   document.getElementById("mkt-es").classList.toggle("active", isEs); document.getElementById("mkt-us").classList.toggle("active", !isEs);
   document.body.classList.toggle("market-es", isEs); document.body.classList.toggle("market-us", !isEs);
   renderPortfolio(); populateSellSelect(); updateNetWorth(); renderHistory(); renderStats(); updateXPBar(); updatePanducoinsUI();
-  refreshHeaderAvatar();
+  renderWorldScene();
+  updateWorldSceneUI();
 }
 
 function renderPortfolio() {
@@ -1515,7 +2232,7 @@ function closeResetModal() { document.getElementById("modal-reset").classList.ad
 function confirmReset() {
   localStorage.clear();
   state = { market: "ES", balanceEs: INITIAL_BALANCE_ES, balanceUs: INITIAL_BALANCE_US, portfolioEs: [], portfolioUs: [], history: [], stats: { ops: 0, buys: 0, sells: 0, opsEs: 0, opsUs: 0, plEs: 0, plUs: 0, best: null, worst: null }, exchangeRate: 1.08, transferDir: "ES_TO_US", xp: 0, activeTitle: null, unlockedTitles: [], panducoins: 0, avatar: { gender: 'male', skin: '#ffdbac', eyes: '#000000', hairStyle: 'short', hairColor: '#000000', clothes: 'shirt_basic', accessory: 'none', pet: 'none', car: 'none' }, inventory: { clothes: ['shirt_basic'], accessories: ['none'], pets: ['none'], cars: ['none'] } };
-  saveToLS(); updateUI(); closeResetModal(); showToast("Juego reiniciado por completo", "success"); refreshHeaderAvatar();
+  saveToLS(); updateUI(); closeResetModal(); showToast("Juego reiniciado por completo", "success"); renderWorldScene(); updateWorldSceneUI();
 }
 
 async function loadExchangeRate() {
