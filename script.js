@@ -1014,20 +1014,25 @@ function refreshHeaderAvatar() {
 }
 
 /**
- * Determina el "tier" de casa según el nivel actual del jugador.
- * tier 0 = chabola / chalet pequeño (niveles 1-3)
- * tier 1 = casa decente (niveles 4-6)
- * tier 2 = villa moderna (niveles 7-9)
- * tier 3 = mansión (niveles 10-12)
- * tier 4 = palacio / penthouse (niveles 13-15)
+ * Determina el "tier" de casa según el patrimonio total del jugador.
+ * tier 0 = chabola          (< 6.000 €)
+ * tier 1 = chalet modesto   (6.000 € – 20.000 €)
+ * tier 2 = villa moderna    (20.000 € – 60.000 €)
+ * tier 3 = mansión          (60.000 € – 150.000 €)
+ * tier 4 = palacio          (≥ 150.000 €)
  */
 function getHouseTier() {
-  const ld = getLevelData(state.xp);
-  const lvl = ld.current.level;
-  if (lvl <= 3)  return 0;
-  if (lvl <= 6)  return 1;
-  if (lvl <= 9)  return 2;
-  if (lvl <= 12) return 3;
+  // Calcular patrimonio total en EUR (igual que updateNetWorth)
+  let totEs = 0, totUs = 0;
+  state.portfolioEs.forEach(p => totEs += (p.currentPrice || p.price) * p.qty);
+  state.portfolioUs.forEach(p => totUs += (p.currentPrice || p.price) * p.qty);
+  const er = state.exchangeRate || 1.08;
+  const totalEur = state.balanceEs + totEs + ((state.balanceUs + totUs) / er);
+
+  if (totalEur < 6000)   return 0;
+  if (totalEur < 20000)  return 1;
+  if (totalEur < 60000)  return 2;
+  if (totalEur < 150000) return 3;
   return 4;
 }
 
