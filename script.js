@@ -2077,21 +2077,39 @@ function updateBuyCost() {
 }
 
 function buyMax() {
-  const price = parseFloat(document.getElementById("buy-price").dataset.price) || 0;
-  if (!price) return showToast("Primero busca el precio del ticker 🔍", "error");
+  const priceEl = document.getElementById("buy-price");
+  const price   = parseFloat(priceEl.dataset.price) || 0;
+  if (!price) { showToast("Primero busca el precio del ticker 🔍", "error"); return; }
+
   const balance = state.market === "ES" ? state.balanceEs : state.balanceUs;
-  // Buscar cuántas acciones caben con comisiones incluidas mediante búsqueda binaria
+
+  // Calcula el coste total con comisiones usando el peor caso (3 tramos)
+  // para no sobrepasar nunca el saldo. No podemos usar calcBuyFees porque
+  // tiene Math.random() y daría resultados inconsistentes.
+  function costWithFees(qty) {
+    const total       = price * qty;
+    const minFee      = state.market === "ES" ? 3.0 : 1.0;
+    const pct         = 0.001;
+    const fixed       = state.market === "ES" ? 2.0 : 0.50;
+    const feePerTr    = Math.max(minFee, total * pct);
+    const maxTranches = total < 500 ? 1 : total < 2000 ? 2 : 3;
+    const totalFee    = feePerTr * maxTranches + (state.market === "ES" ? fixed : 0);
+    return total + totalFee;
+  }
+
+  // Búsqueda binaria para el máximo de acciones que caben en el saldo
   let lo = 1, hi = Math.floor(balance / price), best = 0;
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
-    const fees = calcBuyFees(price * mid, state.market);
-    if (price * mid + fees.totalFee <= balance) { best = mid; lo = mid + 1; }
+    if (costWithFees(mid) <= balance) { best = mid; lo = mid + 1; }
     else hi = mid - 1;
   }
-  if (best <= 0) return showToast("Saldo insuficiente para comprar ni 1 acción", "error");
+
+  if (best <= 0) { showToast("Saldo insuficiente para comprar ni 1 acción", "error"); return; }
+
   document.getElementById("buy-qty").value = best;
   updateBuyCost();
-  showToast(`Máximo: ${best} acción${best > 1 ? 'es' : ''}`, "success");
+  showToast(`Máximo: ${best} acción${best > 1 ? "es" : ""}`, "success");
 }
 
 function executeBuy() {
