@@ -352,6 +352,10 @@ body.market-us .panel-trade { border-color: rgba(58,143,255,0.2); }
 .btn-action { width: 100%; border: none; border-radius: var(--radius); font-family: var(--font-arcade); font-size: 0.45rem; padding: 12px; cursor: pointer; margin-top: 6px;}
 .btn-buy { background: linear-gradient(135deg, #00cc55, #00ff88); color: #001a0a; }
 .btn-sell { background: linear-gradient(135deg, #cc002a, #ff3a5c); color: #1a0005; }
+.buy-actions-row { display: flex; gap: 8px; margin-top: 4px; }
+.buy-actions-row .btn-action { margin-top: 0; flex: 1; }
+.btn-buy-max { background: linear-gradient(135deg, #0a1f0a, #0d2a0d) !important; border: 2px solid #00ff88 !important; color: #00ff88 !important; font-size: 0.42rem !important; white-space: nowrap; }
+.btn-buy-max:hover { background: linear-gradient(135deg, #0d2a0d, #0a1a0a) !important; box-shadow: 0 0 20px rgba(0,255,136,0.4) !important; }
 .trade-msg { margin-top: 8px; font-family: var(--font-arcade); font-size: 0.35rem; text-align: center; min-height: 18px; }
 .trade-msg.success { color: var(--neon-green); }
 .trade-msg.error   { color: var(--neon-red); }

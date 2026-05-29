@@ -2076,6 +2076,24 @@ function updateBuyCost() {
   }
 }
 
+function buyMax() {
+  const price = parseFloat(document.getElementById("buy-price").dataset.price) || 0;
+  if (!price) return showToast("Primero busca el precio del ticker 🔍", "error");
+  const balance = state.market === "ES" ? state.balanceEs : state.balanceUs;
+  // Buscar cuántas acciones caben con comisiones incluidas mediante búsqueda binaria
+  let lo = 1, hi = Math.floor(balance / price), best = 0;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const fees = calcBuyFees(price * mid, state.market);
+    if (price * mid + fees.totalFee <= balance) { best = mid; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  if (best <= 0) return showToast("Saldo insuficiente para comprar ni 1 acción", "error");
+  document.getElementById("buy-qty").value = best;
+  updateBuyCost();
+  showToast(`Máximo: ${best} acción${best > 1 ? 'es' : ''}`, "success");
+}
+
 function executeBuy() {
   const ticker = document.getElementById("buy-price").dataset.ticker; const price = parseFloat(document.getElementById("buy-price").dataset.price); const qty = parseInt(document.getElementById("buy-qty").value);
   if(!ticker || !price || qty <= 0) return showToast("Datos inválidos", "error");
